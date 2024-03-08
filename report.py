@@ -336,12 +336,18 @@ if __name__ == "__main__":
 		with open(path, "r", encoding="utf-8") as f:
 			xml = f.read()
 		
+		output_path = conf["paths"]["output"]
+
+		if not os.path.isdir(output_path):
+			print(f"{output_path} is not found. Now Making...")
+			os.mkdir(output_path)
+		
 		eqp = EQPlotter(conf)
 		eqp.ParseXML(xml)
 
-		ints = ["7", "6+", "6-", "5+", "5-"]
+		eqlevel = conf["eqlevel"]
 		imax = eqp.eqi_.intensity_area.intensity_max
-		eqp.DrawMap("3" if any((s in imax) for s in ints) else "1")
+		eqp.DrawMap("3" if eqlevel[imax] >= 3 else "1")
 		print(eqp.GetMessage())
 	else:
 		print("USAGE>python report.py [path_to_xml]")
