@@ -1,0 +1,17 @@
+# venv 環境のファイルは不要
+__pycache__/
+Include/
+Lib/
+Scripts/
+share/
+
+# テスト・データファイルたち
+data/
+log/
+out/
+*.xml
+
+# セキュリティ上の観点から一旦コミットはしない。
+# 雛形だけにして公開したい。
+config.json
+pyvenv.cfg
