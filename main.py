@@ -4,6 +4,7 @@ import requests
 import json
 import post
 import pickle
+import time
 import os
 
 from logging import INFO, DEBUG, WARNING, ERROR, CRITICAL
@@ -11,7 +12,7 @@ from gc import collect
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
 from finalizer import Finalizer
-from socket import socket, AF_INET, SOCK_STREAM
+from socket import socket, setdefaulttimeout, AF_INET, SOCK_STREAM
 
 from interval import Scheduler
 from report import EQPlotter
@@ -90,7 +91,7 @@ def CheckId(root: Element, feedctl: FeedControl, ns: dict) -> bool:
 
 def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict, logger: log.Logger) -> None:
 	try:
-		response = requests.get("https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml")
+		response = requests.get(config["xmlfeed"]["request_addr"])
 		response.raise_for_status()
 	except requests.exceptions.ConnectionError:
 		logger.warning("地震情報の取得に失敗しました")
@@ -144,8 +145,8 @@ def SendMail_SystemStop(mhd: log.MailHandler) -> None:
 
 	mhd.send(
 		f"{datetime.datetime.now()}\n" +\
-		"I-Maplot は動作を停止・終了しました。ログを確認してください。" +\
-		f"\n!!!! これはデバッグ環境からの通知です !!!!" if fDebug else ""
+		f"==== これはデバッグ環境からの通知です ====\n" if fDebug else "" +\
+		"I-Maplot は動作を停止・終了しました。ログを確認してください。"
 	)
 
 def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
@@ -160,11 +161,9 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		interval_sec = conf["interval_sec"]
 		feedctl_path = conf["paths"]["feedctl"]
 		output_path  = conf["paths"]["output"]
-		ns = conf["xml_ns"]["feed"]
-		schost = conf["exitinfo"]["host"]
-		scport = conf["exitinfo"]["port"]
-		command = conf["exitinfo"]["command"]
-		max_len = conf["exitinfo"]["max_len"]
+		req = conf["sockinfo"]["request"]
+		ans = conf["sockinfo"]["answer"]
+		ns = conf["xmlfeed"]["xml_ns"]["feed"]
 
 		try:
 			with open(feedctl_path, "rb") as f:
@@ -178,9 +177,10 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 			logger.warning(f"画像出力先 {output_path} が見つかりませんでした。作成します。")
 			os.mkdir(output_path)
 
-		sock = socket(AF_INET, SOCK_STREAM)
-		sock.bind((schost, scport))
-		sock.listen()
+		setdefaulttimeout(conf["sockinfo"]["timeout_sec"])
+		sock_req = socket(AF_INET, SOCK_STREAM)
+		sock_req.bind((req["host"], req["port"]))
+		sock_req.listen()
 
 		sched = Scheduler(
 			interval_sec,
@@ -191,12 +191,19 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 
 		while True:
 			try:
-				conn, _ = sock.accept()
-				message = conn.recv(max_len).decode("utf-8")
+				conn, _ = sock_req.accept()
+				message = conn.recv(conf["sockinfo"]["max_len"]).decode("utf-8")
 				conn.close()
 
-				if message == command:
+				if message == req["command"]["alive"]:
+					time.sleep(0.5)
+					sock_ans = socket(AF_INET, SOCK_STREAM)
+					sock_ans.connect((ans["host"], ans["port"]))
+					sock_ans.send(ans["command"]["alive"].encode("utf-8"))
+					sock_ans.close()
+				elif message == req["command"]["exit"]:
 					break
+	
 			except Exception as e:
 				logger.error(e)
 
@@ -207,7 +214,7 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 	else:
 		logger.info("システムは正常に終了しました")
 	finally:
-		sock.close()
+		sock_req.close()
 
 if __name__ == "__main__":
 	CONFIG_PATH = "./config.json"

@@ -1,4 +1,4 @@
-from socket import socket, AF_INET, SOCK_STREAM
+from socket import socket, setdefaulttimeout, AF_INET, SOCK_STREAM
 import json
 
 if __name__ == "__main__":
@@ -8,13 +8,16 @@ if __name__ == "__main__":
 	try:
 		with open(CONFIG_PATH, "r", encoding=CONF_ENCTYPE) as f:
 			conf = json.load(f)
-			schost = conf["exitinfo"]["host"]
-			scport = conf["exitinfo"]["port"]
-			command = conf["exitinfo"]["command"]
+		
+		req = conf["sockinfo"]["request"]
+		reqhost = req["host"]
+		reqport = req["port"]
+		cmd_exit = req["command"]["exit"]
 
+		setdefaulttimeout(conf["sockinfo"]["timeout_sec"])
 		sock = socket(AF_INET, SOCK_STREAM)
-		sock.connect((schost, scport))
-		sock.send(command.encode("utf-8"))
+		sock.connect((reqhost, reqport))
+		sock.send(cmd_exit.encode("utf-8"))
 		sock.close()
 	except Exception as e:
 		print(f"ERROR:{e}")

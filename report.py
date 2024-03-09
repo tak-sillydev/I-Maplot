@@ -47,7 +47,7 @@ class EQPlotter:
 		self.areamap_path_ = config["paths"]["areamap"]
 		self.images_path_ = config["paths"]["images"]
 		self.output_path_ = config["paths"]["output"]
-		self.ns_ = config["xml_ns"]["report"]
+		self.ns_ = config["xmlfeed"]["xml_ns"]["report"]
 
 	def ParseXML(self, xml):
 		ns_report = self.ns_["report"]

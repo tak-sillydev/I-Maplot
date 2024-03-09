@@ -1,0 +1,159 @@
+{
+	"eqlevel": {
+		"7": 3,
+		"6+": 3,
+		"6-": 3,
+		"5+": 3,
+		"5-": 3,
+		"4": 2,
+		"3": 1,
+		"2": 0,
+		"1": 0,
+		"-" : -1
+	},
+	"level_str": [
+		"",
+		"",
+		"やや強い", 
+		"強い"
+	],
+	"simplify_tolerance": 0.001,
+	"interval_sec": 30,
+	"paths": {
+		"shapefile": "./20190125_AreaForecastLocalE_GIS/地震情報／細分区域.shp",
+		"areamap": "./data/areamap.pkl",
+		"assistant": "./data/assistant.pkl",
+		"feedctl": "./data/feedctl.pkl",
+		"images": "./images",
+		"output": "./out",
+		"log": {
+			"dir": "./log",
+			"file": "jmaeq.log"
+		}
+	},
+	"pref": [
+		{ "name": "北海道", "codestart": "100", "codeend": "199" },
+		{ "name": "青森県", "codestart": "200", "codeend": "209" },
+		{ "name": "岩手県", "codestart": "210", "codeend": "219" },
+		{ "name": "宮城県", "codestart": "220", "codeend": "229" },
+		{ "name": "秋田県", "codestart": "230", "codeend": "239" },
+		{ "name": "山形県", "codestart": "240", "codeend": "249" },
+		{ "name": "福島県", "codestart": "250", "codeend": "259" },
+		{ "name": "茨城県", "codestart": "300", "codeend": "309" },
+		{ "name": "栃木県", "codestart": "310", "codeend": "319" },
+		{ "name": "群馬県", "codestart": "320", "codeend": "329" },
+		{ "name": "埼玉県", "codestart": "330", "codeend": "339" },
+		{ "name": "千葉県", "codestart": "340", "codeend": "349" },
+		{ "name": "東京都", "codestart": "350", "codeend": "359" },
+		{ "name": "神奈川県", "codestart": "360", "codeend": "369" },
+		{ "name": "新潟県", "codestart": "370", "codeend": "379" },
+		{ "name": "富山県", "codestart": "380", "codeend": "389" },
+		{ "name": "石川県", "codestart": "390", "codeend": "399" },
+		{ "name": "福井県", "codestart": "400", "codeend": "409" },
+		{ "name": "山梨県", "codestart": "410", "codeend": "419" },
+		{ "name": "長野県", "codestart": "420", "codeend": "429" },
+		{ "name": "岐阜県", "codestart": "430", "codeend": "439" },
+		{ "name": "静岡県", "codestart": "440", "codeend": "449" },
+		{ "name": "愛知県", "codestart": "450", "codeend": "459" },
+		{ "name": "三重県", "codestart": "460", "codeend": "469" },
+		{ "name": "滋賀県", "codestart": "500", "codeend": "509" },
+		{ "name": "京都府", "codestart": "510", "codeend": "519" },
+		{ "name": "大阪府", "codestart": "520", "codeend": "529" },
+		{ "name": "兵庫県", "codestart": "530", "codeend": "539" },
+		{ "name": "奈良県", "codestart": "540", "codeend": "549" },
+		{ "name": "和歌山県", "codestart": "550", "codeend": "559" },
+		{ "name": "鳥取県", "codestart": "560", "codeend": "569" },
+		{ "name": "島根県", "codestart": "570", "codeend": "579" },
+		{ "name": "岡山県", "codestart": "580", "codeend": "589" },
+		{ "name": "広島県", "codestart": "590", "codeend": "599" },
+		{ "name": "徳島県", "codestart": "600", "codeend": "609" },
+		{ "name": "香川県", "codestart": "610", "codeend": "619" },
+		{ "name": "愛媛県", "codestart": "620", "codeend": "629" },
+		{ "name": "高知県", "codestart": "630", "codeend": "639" },
+		{ "name": "山口県", "codestart": "700", "codeend": "709" },
+		{ "name": "福岡県", "codestart": "710", "codeend": "719" },
+		{ "name": "佐賀県", "codestart": "720", "codeend": "729" },
+		{ "name": "長崎県", "codestart": "730", "codeend": "739" },
+		{ "name": "熊本県", "codestart": "740", "codeend": "749" },
+		{ "name": "大分県", "codestart": "750", "codeend": "759" },
+		{ "name": "宮崎県", "codestart": "760", "codeend": "769" },
+		{ "name": "鹿児島県", "codestart": "770", "codeend": "779" },
+		{ "name": "沖縄県", "codestart": "800", "codeend": "809" }
+	],
+	"region": [
+		{ "name": "北海道地方", "codestart": "100", "codeend": "199" },
+		{ "name": "東北地方", "codestart": "200", "codeend": "299" },
+		{ "name": "関東地方", "codestart": "300", "codeend": "353" },
+		{ "name": "伊豆諸島", "codestart": "354", "codeend": "358" },
+		{ "name": "小笠原地方", "codestart": "359", "codeend": "359" },
+		{ "name": "関東地方", "codestart": "360", "codeend": "369" },
+		{ "name": "北陸地方", "codestart": "370", "codeend": "410" },
+		{ "name": "甲信地方", "codestart": "411", "codeend": "429" },
+		{ "name": "東海地方", "codestart": "430", "codeend": "499" },
+		{ "name": "近畿地方", "codestart": "500", "codeend": "559" },
+		{ "name": "中国地方", "codestart": "560", "codeend": "599" },
+		{ "name": "四国地方", "codestart": "600", "codeend": "699" },
+		{ "name": "中国地方", "codestart": "700", "codeend": "709" },
+		{ "name": "九州地方", "codestart": "710", "codeend": "777" },
+		{ "name": "奄美群島", "codestart": "778", "codeend": "779" },
+		{ "name": "沖縄地方", "codestart": "800", "codeend": "899" }
+	],
+	"xmlfeed": {
+		"request_addr": "https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml",
+		"xml_ns": {
+			"feed": {
+				"atom": "http://www.w3.org/2005/Atom"
+			},
+			"report": {
+				"report": {
+					"atom": "http://xml.kishou.go.jp/jmaxml1/",
+					"jmx": "http://xml.kishou.go.jp/jmaxml1/"
+				},
+				"head": {
+					"atom": "http://xml.kishou.go.jp/jmaxml1/informationBasis1/"
+				},
+				"body": {
+					"atom": "http://xml.kishou.go.jp/jmaxml1/body/seismology1/",
+					"jmx_eb": "http://xml.kishou.go.jp/jmaxml1/elementBasis1/"
+				}
+			}
+		}
+	},
+	"mailinfo": {
+		"server": {
+			"addr": "",
+			"port": 0
+		},
+		"addr_to": "",
+		"addr_from": "",
+		"password": ""
+	},
+	"sockinfo": {
+		"timeout_sec": 0,
+		"max_len": 1024,
+		"request": {
+			"host": "",
+			"port": 0,
+			"command": {
+				"exit":"JMAEQ I-Maplot EXIT",
+				"alive": "Is JMAEQ I-Maplot ALIVE?"
+			}
+		},
+		"answer": {
+			"host": "",
+			"port": 0,
+			"command": {
+				"alive": "JMAEQ I-Maplot is still ALIVE."
+			}
+		}
+	},
+	"postauth": {
+		"api_key": "",
+		"api_secret": "",
+		"access_token": "",
+		"access_secret": "",
+		"client_id": "",
+		"client_secret": "",
+		"bearer_token": ""
+	}
+}
