@@ -52,13 +52,13 @@ class FeedControl:
 	xmlid: str = ""
 	last_time: datetime.datetime = None
 	pkl_path: str = ""
-	proc_id: int = 0 
+	reqerr_count: int = 0
 
 	def __init__(self, pickle_path: str = "") -> None:
 		self.last_time = \
 			datetime.datetime.now(datetime.timezone.utc)
 		self.pkl_path = pickle_path
-		self.proc_id = os.getpid()
+		self.reqerr_count = 0
 		
 	def PickleMyself(self):
 		with open(self.pkl_path, "wb") as f:
@@ -89,16 +89,22 @@ def CheckId(root: Element, feedctl: FeedControl, ns: dict) -> bool:
 	feedctl.xmlid = current
 	return ret
 
+def OnRequestException(feedctl: FeedControl, config: dict, logger: log.Logger, e: Exception) -> None:
+	logger.warning("地震情報の取得に失敗しました")
+	logger.warning(e)
+	feedctl.reqerr_count += 1
+
+	if feedctl.reqerr_count % config["xmlfeed"]["request"]["error_count"] == 0:
+		logger.error(f"地震情報の取得に{feedctl.reqerr_count}回連続で失敗しました。ログを確認してください。")
+
 def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict, logger: log.Logger) -> None:
 	try:
-		response = requests.get(config["xmlfeed"]["request_addr"])
+		response = requests.get(config["xmlfeed"]["request"]["address"])
 		response.raise_for_status()
-	except requests.exceptions.ConnectionError:
-		logger.warning("地震情報の取得に失敗しました")
-	except requests.exceptions.RequestException:
-		logger.warning("地震情報の取得に失敗しました")
-		logger.warning(f"HTTP Status {response.status_code}")
+	except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+		OnRequestException(feedctl, config, logger, e)
 	else:
+		feedctl.reqerr_count = 0
 		response.encoding = response.apparent_encoding
 		xml = ElementTree.fromstring(response.text)
 		
@@ -134,11 +140,11 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict, logger: lo
 					post.Post(config["postauth"], message, imgpath)
 					del eqp
 				
-				feedctl.PickleMyself()
 				collect()
-				return
 		else:
-			logger.info("地震情報：新しい地震の情報はありません")
+			logger.debug("地震情報：新しい地震の情報はありません")
+	finally:
+		feedctl.PickleMyself()
 
 def SendMail_SystemStop(mhd: log.MailHandler) -> None:
 	global fDebug
@@ -178,7 +184,10 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 			os.mkdir(output_path)
 
 		setdefaulttimeout(conf["sockinfo"]["timeout_sec"])
+
+		# このコマンド受付ソケットだけは無限に待ち受け状態（ブロッキング状態、タイムアウトなし）
 		sock_req = socket(AF_INET, SOCK_STREAM)
+		sock_req.settimeout(None)
 		sock_req.bind((req["host"], req["port"]))
 		sock_req.listen()
 

@@ -99,7 +99,10 @@
 		{ "name": "沖縄地方", "codestart": "800", "codeend": "899" }
 	],
 	"xmlfeed": {
-		"request_addr": "https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml",
+		"request": {
+			"address": "https://www.data.jma.go.jp/developer/xml/feed/eqvol.xml",
+			"error_count": 0
+		},
 		"xml_ns": {
 			"feed": {
 				"atom": "http://www.w3.org/2005/Atom"
