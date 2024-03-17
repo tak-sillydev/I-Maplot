@@ -1,6 +1,7 @@
 # coding: utf-8
 import datetime
 import requests
+import struct
 import json
 import post
 import pickle
@@ -12,7 +13,7 @@ from gc import collect
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element
 from finalizer import Finalizer
-from socket import socket, setdefaulttimeout, AF_INET, SOCK_STREAM
+from socket import socket, setdefaulttimeout, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 
 from interval import Scheduler
 from report import EQPlotter
@@ -167,8 +168,10 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		interval_sec = conf["interval_sec"]
 		feedctl_path = conf["paths"]["feedctl"]
 		output_path  = conf["paths"]["output"]
-		req = conf["sockinfo"]["request"]
-		ans = conf["sockinfo"]["answer"]
+		sockinfo = conf["sockinfo"]
+		codeinfo = sockinfo["code"]
+		req = sockinfo["request"]
+		ans = sockinfo["answer"]
 		ns = conf["xmlfeed"]["xml_ns"]["feed"]
 
 		try:
@@ -188,6 +191,7 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		# このコマンド受付ソケットだけは無限に待ち受け状態（ブロッキング状態、タイムアウトなし）
 		sock_req = socket(AF_INET, SOCK_STREAM)
 		sock_req.settimeout(None)
+		sock_req.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 		sock_req.bind((req["host"], req["port"]))
 		sock_req.listen()
 
@@ -201,18 +205,30 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		while True:
 			try:
 				conn, _ = sock_req.accept()
-				message = conn.recv(conf["sockinfo"]["max_len"]).decode("utf-8")
+				data = conn.recv(sockinfo["max_len"])
 				conn.close()
 
-				if message == req["command"]["alive"]:
+				code, bmsg = struct.unpack("b" + str(len(data) - 1) + "s", data)
+				msg = bmsg.decode(sockinfo["charset"])
+
+				if code == codeinfo["alive"]:
 					time.sleep(0.5)
 					sock_ans = socket(AF_INET, SOCK_STREAM)
 					sock_ans.connect((ans["host"], ans["port"]))
-					sock_ans.send(ans["command"]["alive"].encode("utf-8"))
+
+					msg = ans["default_msg"]["alive"].encode(sockinfo["charset"])
+					data = struct.pack("b" + str(len(msg)) + "s", code, msg)
+
+					sock_ans.send(data)
 					sock_ans.close()
-				elif message == req["command"]["exit"]:
+
+				elif code == codeinfo["exit"]:
+					if len(msg) > 0:
+						logger.error(msg + " - message on EXIT")
 					break
 	
+			except struct.error as e:
+				logger.info(e)
 			except Exception as e:
 				logger.error(e)
 

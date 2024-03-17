@@ -79,7 +79,7 @@ def SendMail(
 
 def set_logger(level: int, mhd: MailHandler, config_path: str, conf_enctype : str = "utf-8") -> None:
 	# 全体のログ設定
-	# ファイルに書き出す。ログが1MB溜まったらバックアップにして新しいファイルを作る。
+	# ファイルに書き出す。ログが100KB溜まったらバックアップにして新しいファイルを作る。
 	with open(config_path, "r", encoding=conf_enctype) as f:
 		conf = json.load(f)
 		logdir  = conf["paths"]["log"]["dir"]
@@ -89,7 +89,7 @@ def set_logger(level: int, mhd: MailHandler, config_path: str, conf_enctype : st
 	root_logger.setLevel(level)
 
 	# filename, mode, maxBytes, backupCount, encoding
-	rotating_handler_args = (os.path.join(logdir, logfile), "a", 1000 * 1024, 3, "utf-8")
+	rotating_handler_args = (os.path.join(logdir, logfile), "a", 100 * 1024, 3, "utf-8")
 
 	try:
 		rotating_handler = handlers.RotatingFileHandler(*rotating_handler_args)
