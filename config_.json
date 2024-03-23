@@ -132,20 +132,25 @@
 		"password": ""
 	},
 	"sockinfo": {
-		"timeout_sec": 0,
+		"timeout_sec": 0.0,
 		"max_len": 1024,
+		"charset": "utf-8",
+		"code": {
+			"exit": 1,
+			"alive": 2
+		},
 		"request": {
 			"host": "",
 			"port": 0,
-			"command": {
-				"exit":"JMAEQ I-Maplot EXIT",
+			"default_msg": {
+				"exit": "exit.py was executed.",
 				"alive": "Is JMAEQ I-Maplot ALIVE?"
 			}
 		},
 		"answer": {
 			"host": "",
 			"port": 0,
-			"command": {
+			"default_msg": {
 				"alive": "JMAEQ I-Maplot is still ALIVE."
 			}
 		}
