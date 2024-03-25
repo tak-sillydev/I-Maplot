@@ -42,7 +42,7 @@ class TLS_SMTPHandler(handlers.SMTPHandler):
 	"""
 		デフォルトの logging.SMTPHandler は Gmail の SMTP に対応していない（TLS 認証がない）
 		ので、クラスを継承、ログ送出関数（emit）をオーバーライド
-		参考：https://qiita.com/ryoheiszk/items/8b072adeb368cc35588d
+		参考 : https://qiita.com/ryoheiszk/items/8b072adeb368cc35588d
 	"""
 	def emit(self, record):
 		for toaddr in self.toaddrs:

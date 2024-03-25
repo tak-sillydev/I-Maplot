@@ -22,7 +22,15 @@ from eqinfo import EQInfo
 ### class EQPlotter BEGIN ###
 
 class EQPlotter:
+	"""
+		震度地図を描画する。
+		I-Maplot の根幹を担う部分
+	"""
 	def __init__(self, config: dict) -> None:
+		"""
+			コンストラクタ
+			config: config.json に規定された設定情報。LoadConfig 関数にわたす
+		"""
 		self.eqi_: EQInfo = EQInfo(config)
 		self.fhypocenter_: bool = False
 		self.assistant_ = None
@@ -34,40 +42,53 @@ class EQPlotter:
 		self._LoadAssistantData()
 		self._PrepareFigure()
 
-	def LoadConfig(self, config: dict):
+	def LoadConfig(self, config: dict) -> None:
+		"""
+			設定情報をメンバ変数に設定する。
+			config: config.json に規定された設定情報
+		"""
 		self.assistant_path_: str = config["paths"]["assistant"]
 		self.areamap_path_: str = config["paths"]["areamap"]
 		self.images_path_: str = config["paths"]["images"]
 		self.output_path_: str = config["paths"]["output"]
 		self.ns_: dict = config["xmlfeed"]["xml_ns"]["report"]
 
-	def ParseXML(self, xml):
+	def ParseXML(self, xml: str):
+		"""
+			地震に関する情報（XML 電文）を解析してメンバ変数に格納する。
+			xml: XML 電文の文字列
+		"""
 		ns_report = self.ns_["report"]
 		ns_head = self.ns_["head"]
 		ns_body = self.ns_["body"]
 
+		# 電文は Control, Head, Body 部からなる
 		root = ElementTree.fromstring(xml)
 		Ctrl = root.find("atom:Control", ns_report)
 		Head = root.find("atom:Head", ns_head)
 		Body = root.find("atom:Body", ns_body)
 
+		# 「震度速報」／「震源・震度に関する情報」を判別する
 		Title = Ctrl.find("atom:Title", ns_report)
 		self.fhypocenter_ = True if "震源" in Title.text else False
 
 		OriginTime = Body.find(".//atom:OriginTime", ns_body)
 
+		# （推定）地震発生時刻の取り出し
 		if OriginTime is None:
 			TargetTime = Head.find(".//atom:TargetDateTime", ns_head)
 			self.eqi_.origin_dt = datetime.datetime.fromisoformat(TargetTime.text)
 		else:
 			self.eqi_.origin_dt = datetime.datetime.fromisoformat(OriginTime.text)
 
+		# 固定付加文の取得。文はパターン化されておりコードで識別することができる
 		ForecastComment = Body.findall(".//atom:ForecastComment[@codeType='固定付加文']", ns_body)
 		for c in ForecastComment:
 			Code = c.find(".//atom:Code", ns_body)
 			if Code is not None:
 				self.eqi_.code = Code.text.split()
 		
+		# 震源情報がある場合、その座標や深さ、マグニチュードを取得する
 		if self.fhypocenter_:
 			Coordinate = Body.find(".//jmx_eb:Coordinate", ns_body)
 			Hypocenter = Body.find(".//atom:Hypocenter/atom:Area/atom:Name", ns_body)
@@ -77,9 +98,11 @@ class EQPlotter:
 			Magnitude = Body.find(".//jmx_eb:Magnitude", ns_body)
 			self.eqi_.magnitude = float(Magnitude.text)
 
+		# 震度情報リストの取得
 		Intensity = Body.find(".//atom:Intensity/atom:Observation", ns_body)
 		CodeType = Intensity.findall(".//atom:CodeDefine/atom:Type", ns_body)
 
+		# 震度情報を１つずつ解析してクラスに格納していく
 		for n in CodeType:
 			xpath = n.attrib['xpath']
 			path_split = xpath.split('/')
@@ -103,17 +126,22 @@ class EQPlotter:
 			elif   "市町村" in n.text:
 				self.eqi_.intensity_city.AddIntensity(lsint)
 
-	def _PrepareFigure(self):
+	def _PrepareFigure(self) -> None:
+		""" ベース地図を読み込む """
 		with open(self.areamap_path_, "rb") as f:
 			self.fig_ = pickle.load(f)
 			self.ax_ = self.fig_.gca()
 
 		self.fig_.set_size_inches(16, 9)
 
-	def _LoadAssistantData(self):
+	def _LoadAssistantData(self) -> None:
+		""" 補助情報（区域の重心、上下左右端座標等）を読み込む """
 		self.assistant_ = read_pickle(self.assistant_path_)
 
 	def GetMessage(self) -> str:
+		"""
+			メンバ変数に格納された情報から地震情報文を作成する。
+		"""
 		dt  = self.eqi_.origin_dt
 		fdt = True if dt.hour < 12 else False
 		rets = ""
@@ -139,7 +167,10 @@ class EQPlotter:
 			rets += self.eqi_.intensity_area.PrintIntensity()
 		return rets
 
-	def PrintRegion(self):
+	def PrintRegion(self) -> str:
+		"""
+			（震度速報時に）地震のあった地方名を出力する。
+		"""
 		intensity = self.eqi_.intensity_area
 		max_area = intensity.intensity[intensity.intensity_max]
 
@@ -149,7 +180,11 @@ class EQPlotter:
 
 		return region + ("で" if len(region) > 0 else "")
 
-	def DrawMap(self, bound_level="1") -> str:
+	def DrawMap(self, bound_level: str="1") -> str:
+		"""
+			震度地図を描画する。
+			bound_level: 描画に際して必ず含める震度
+		"""
 		self.ax_.axis("tight")
 		self.ax_.axis("off")
 		self.ax_.set_aspect("equal")
@@ -228,6 +263,11 @@ class EQPlotter:
 
 	# x, y は画像としての座標 (px)
 	def PlotImage(self, px: list, img_add) -> None:
+		"""
+			ベース地図に png 画像を重ね合わせる。
+			px: 座標 (x, y) のリスト。同じ画像をまとめて描画可能
+			img_add: 地図に重ねる画像 
+		"""
 		if (self.img_base_ is None) or (img_add is None): return
 
 		bseh, bsew = self.img_base_.shape[:2]
@@ -240,6 +280,13 @@ class EQPlotter:
 
 	# x, y は地図としての座標 (lon, lat)
 	def PlotHypocenter(self, lon, lat, bound: tuple, zoom=1.0) -> None:
+		"""
+			ベース地図に震源画像を描画する。
+			lon: 経度
+			lat: 緯度
+			bound: 地図における上下左右端の緯度経度
+			zoom: 画像を重ね合わせる際の倍率
+		"""
 		img_add = cv2.imread(os.path.join(self.images_path_, "hypocenter.png"), cv2.IMREAD_UNCHANGED)
 		img_add = cv2.resize(img_add, dsize=None, fx=zoom, fy=zoom, interpolation=cv2.INTER_LINEAR)
 		
@@ -249,16 +296,27 @@ class EQPlotter:
 
 	# x, y は地図としての座標 (lon, lat)
 	def PlotIntensity(self, coords: list, bound: tuple, intensity: str, zoom=1.0) -> None:
+		"""
+			ベース地図に震度画像を描画する。
+			coords: 緯度経度のリスト
+			bound: 地図における上下左右端の緯度経度
+			intensity: 描画する震度
+			zoom: 画像を重ね合わせる際の倍率
+		"""
 		img_add = cv2.imread(os.path.join(self.images_path_, intensity+".png"), cv2.IMREAD_UNCHANGED)
 		img_add = cv2.resize(img_add, dsize=None, fx=zoom, fy=zoom, interpolation=cv2.INTER_LINEAR)
 
 		px = [self.GeoCoord2Pixel(bound, lon, lat) for lon, lat in coords]
 		cx, cy = GetCenterPixel(img_add)
 		self.PlotImage([(x - cx, y - cy) for x, y in px], img_add)
-
-	# 緯度経度からピクセル座標に変換する
-	# Lon, Lat -> x, y
+	
 	def GeoCoord2Pixel(self, bound: tuple, lon: float, lat: float) -> tuple:
+		"""
+			緯度経度からピクセル座標に変換する。lon, lat を x, y のタプルにして返す。
+			bound: 地図における上下左右端の緯度経度
+			lon: 経度
+			lat: 緯度
+		"""
 		if self.img_base_ is None: return (0, 0)
 
 		lpx, lpy = GetLatLonperPixel(bound, self.img_base_)
@@ -272,27 +330,38 @@ class EQPlotter:
 
 ### funcdef BEGIN ###
 
-# １ピクセルあたりの緯度経度の変化を返す
-# return as (x, y) per lon, lat
 def GetLatLonperPixel(bound: tuple, img) -> tuple:
+	"""
+		1 ピクセルあたりの緯度経度の変化を計算する。1 ピクセルあたりの度数の変化量を x, y のタプルにして返す。
+		bound: 地図における上下左右端の緯度経度
+		img: 画像化されたベース地図
+	"""
 	if img is None: return (0, 0)
 
 	hpx, wpx = img.shape[:2]
 	hlt, wln = bound[3] - bound[1], bound[2] - bound[0]
 
-	return (hlt / hpx, wln / wpx)
+	return (wln / wpx, hlt / hpx)
 
-# 画像の中央座標を取得する
 def GetCenterPixel(img) -> tuple:
+	"""
+		画像の中央座標を取得する
+		img: 画像
+	"""
 	if img is None: return (0, 0)
 
 	cx = int(Decimal(str(img.shape[1] / 2)).quantize(Decimal("0")))
 	cy = int(Decimal(str(img.shape[0] / 2)).quantize(Decimal("0")))
 	return (cx, cy)
 
-# img_add must have alpha channel
-# 参考：https://qiita.com/smatsumt/items/923aefb052f217f2f3c5
 def alpha_blend(img_base, img_add, x: int, y: int) -> None:
+	"""
+		参考 : https://qiita.com/smatsumt/items/923aefb052f217f2f3c5
+		画像を重ね合わせる（アルファブレンド）。
+		img_base: ベース画像
+		img_add: 重ねる画像。アルファチャンネルを持っていなければならない
+		x, y: 重ね合わせ位置。重ねる画像の左上端にここが来る 
+	"""
 	h, w = img_add.shape[:2]
 	x0, y0 = max(x, 0), max(y, 0)
 	x1, y1 = min(x + w, img_base.shape[1]), min(y + h, img_base.shape[0])
@@ -307,7 +376,15 @@ def csv2tuple(csv: str) -> tuple:
 	return tuple(map(float, csv.split(",")))
 
 # max_bound: [min_x, min_y, max_x, max_y]
-def ExpandBound(max_bound: list, min_x, min_y, max_x, max_y):
+def ExpandBound(max_bound: list, min_x: float, min_y: float, max_x: float, max_y: float) -> list:
+	"""
+		矩形と座標を比較し、矩形が拡大するように更新する。
+		max_bound: 更新される図形
+		min_x: 左
+		min_y: 上
+		max_x: 右
+		max_y: 下
+	"""
 	max_bound[0] = min(min_x, max_bound[0])	# min_x
 	max_bound[1] = min(min_y, max_bound[1])	# min_y
 	max_bound[2] = max(max_x, max_bound[2])	# max_x
