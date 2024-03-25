@@ -79,10 +79,10 @@ class EQInfo:
 
 	# 震源に関する情報
 	hypocenter: str		= ""
-	latitude: float		= 0.0
-	longitude: float	= 0.0
-	magnitude: float	= 0.0
-	depth: int	= 0
+	latitude: float		= None
+	longitude: float	= None
+	magnitude: float	= None
+	depth: int	= None
 
 	# 震度に関する情報
 	intensity_pref: IntensityHolder = None
@@ -96,12 +96,17 @@ class EQInfo:
 
 	def ParseHypocenter(self, s: str):
 		ls = re.findall("[+-][0-9.]+", s)
-		self.latitude  = float(ls[0])
-		self.longitude = float(ls[1])
-		self.depth = int(ls[2]) / -1000
+		try:
+			self.latitude  = float(ls[0])
+			self.longitude = float(ls[1])
+			self.depth = int(ls[2]) / -1000
+		except IndexError:
+			pass
 
 	def PrintDepth(self) -> str:
-		if self.depth < 10:
+		if self.depth is None:
+			return "不明"
+		elif self.depth < 10:
 			return "ごく浅い"
 		elif self.depth >= 700:
 			return str(int(self.depth)) + "キロ以上"
