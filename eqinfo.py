@@ -9,17 +9,9 @@ from datetime import datetime
 # 0  -> 通常の地震
 # -1 -> 使われない（番兵）
 
-class IntensityHolder:
-	intensity_max: str	= "-"
-	intensity: dict		= None
-	bound_level: str	= "1"
-	eqlevel: int		= -1
-
-	eqlevel_config: dict	= None
-	eqlevel_str: list	= None
- 
+class IntensityHolder: 
 	def __init__(self, config: dict) -> None:
-		self.intensity = {
+		self.intensity: dict = {
 			"7" : [],
 			"6+": [],
 			"6-": [],
@@ -31,8 +23,11 @@ class IntensityHolder:
 			"1" : [],
 			"-" : [], # intensity_max 用の番兵
 		}
-		self.eqlevel_config = config["eqlevel"]
-		self.eqlevel_str = config["level_str"]
+		self.intensity_max: str	= "-"
+		self.bound_level: str	= "1"
+		self.eqlevel: int		= -1
+		self.eqlevel_config: dict	= config["eqlevel"]
+		self.eqlevel_str: list		= config["level_str"]
 	
 	# list of tuple (name, intensity) 
 	def AddIntensity(self, lsint: list) -> None:
@@ -73,26 +68,22 @@ class IntensityHolder:
 		return self.eqlevel_str[self.eqlevel]
 
 class EQInfo:
-	id: str		= ""
-	code: list	= None
-	origin_dt: datetime	= None
-
-	# 震源に関する情報
-	hypocenter: str		= ""
-	latitude: float		= 0.0
-	longitude: float	= 0.0
-	magnitude: float	= 0.0
-	depth: int	= 0
-
-	# 震度に関する情報
-	intensity_pref: IntensityHolder = None
-	intensity_area: IntensityHolder = None
-	intensity_city: IntensityHolder = None
-
 	def __init__(self, config: dict) -> None:
-		self.intensity_pref = IntensityHolder(config)
-		self.intensity_area = IntensityHolder(config)
-		self.intensity_city = IntensityHolder(config)
+		self.origin_dt: datetime	= None
+		self.code: list	= None
+		self.id: str	= ""
+
+		# 震源に関する情報
+		self.hypocenter: str	= ""
+		self.latitude: float	= 0.0
+		self.longitude: float	= 0.0
+		self.magnitude: float	= 0.0
+		self.depth: int			= 0
+
+		# 震度に関する情報
+		self.intensity_pref: IntensityHolder = IntensityHolder(config)
+		self.intensity_area: IntensityHolder = IntensityHolder(config)
+		self.intensity_city: IntensityHolder = IntensityHolder(config)
 
 	def ParseHypocenter(self, s: str):
 		ls = re.findall("[+-][0-9.]+", s)

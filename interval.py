@@ -10,18 +10,13 @@ class Scheduler:
 		Scheduler クラス
 		callback に登録した特定の関数を、sec 秒おきに定期実行する。
 	"""
-	callback_		= None	# callback function
-	timer_: threading.Timer = None
-	sec_: int		= 0xffffffff
-	fexec_: bool	= False
-	args_: tuple	= None
-	logger_: log.Logger = None
-
 	def __init__(self, sec: int, callback, args: tuple = None) -> None:
-		self.sec_ = sec
-		self.callback_ = callback
-		self.args_ = args
-		self.logger_ = log.getLogger(__name__)
+		self.callback_		= callback
+		self.sec_: int		= sec
+		self.args_: tuple	= args
+		self.fexec_: bool	= False
+		self.logger_: log.Logger	= log.getLogger(__name__)
+		timer_: threading.Timer		= None
 
 	def caller_(self) -> None:
 		try:

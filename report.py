@@ -22,32 +22,24 @@ from eqinfo import EQInfo
 ### class EQPlotter BEGIN ###
 
 class EQPlotter:
-	assistant_ = None
-	fig_ = None
-	ax_ = None
-	eqi_ = None
-	img_base_ = None
-
-	fhypocenter_ = False
-
-	assistant_path_: str = ""
-	areamap_path_: str = ""
-	images_path_: str = ""
-	output_path_: str = ""
-	ns_: dict = None
-
 	def __init__(self, config: dict) -> None:
-		self.eqi_ = EQInfo(config)
+		self.eqi_: EQInfo = EQInfo(config)
+		self.fhypocenter_: bool = False
+		self.assistant_ = None
+		self.fig_ = None
+		self.ax_ = None
+		self.img_base_ = None
+
 		self.LoadConfig(config)
 		self._LoadAssistantData()
 		self._PrepareFigure()
 
 	def LoadConfig(self, config: dict):
-		self.assistant_path_ = config["paths"]["assistant"]
-		self.areamap_path_ = config["paths"]["areamap"]
-		self.images_path_ = config["paths"]["images"]
-		self.output_path_ = config["paths"]["output"]
-		self.ns_ = config["xmlfeed"]["xml_ns"]["report"]
+		self.assistant_path_: str = config["paths"]["assistant"]
+		self.areamap_path_: str = config["paths"]["areamap"]
+		self.images_path_: str = config["paths"]["images"]
+		self.output_path_: str = config["paths"]["output"]
+		self.ns_: dict = config["xmlfeed"]["xml_ns"]["report"]
 
 	def ParseXML(self, xml):
 		ns_report = self.ns_["report"]

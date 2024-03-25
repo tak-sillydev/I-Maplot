@@ -14,21 +14,16 @@ from email.utils import formatdate
 ### class MailHandler BEGIN ###
 
 class MailHandler:
-	server_addr: str = ""
-	server_port: str = ""
-	addr_to: str = ""
-	addr_from: str = ""
-	password: str = ""
 	subject: str = "I-Maplot システム動作通知"
 
 	def __init__(self, config_path: str, conf_enctype: str = "utf-8") -> None:
 		with open(config_path, "r", encoding=conf_enctype) as f:
 			conf = json.load(f)
-			self.server_addr = conf["mailinfo"]["server"]["addr"]
-			self.server_port = conf["mailinfo"]["server"]["port"]
-			self.addr_to = conf["mailinfo"]["addr_to"]
-			self.addr_from = conf["mailinfo"]["addr_from"]
-			self.password = conf["mailinfo"]["password"]
+			self.server_addr: str	= conf["mailinfo"]["server"]["addr"]
+			self.server_port: str	= conf["mailinfo"]["server"]["port"]
+			self.addr_to: str	= conf["mailinfo"]["addr_to"]
+			self.addr_from: str	= conf["mailinfo"]["addr_from"]
+			self.password: str	= conf["mailinfo"]["password"]
 
 	def send(self, body: str) -> None:
 		SendMail(
