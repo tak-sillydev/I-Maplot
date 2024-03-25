@@ -95,12 +95,17 @@ class EQPlotter:
 			self.eqi_.ParseHypocenter(Coordinate.text)
 			self.eqi_.hypocenter = Hypocenter.text
 
-			Magnitude = Body.find(".//jmx_eb:Magnitude", ns_body)
-			self.eqi_.magnitude = float(Magnitude.text)
+			try:
+				Magnitude = Body.find(".//jmx_eb:Magnitude", ns_body)
+				self.eqi_.magnitude = float(Magnitude.text)
+			except:
+				self.eqi_.magnitude = None
 
-		# 震度情報リストの取得
-		Intensity = Body.find(".//atom:Intensity/atom:Observation", ns_body)
-		CodeType = Intensity.findall(".//atom:CodeDefine/atom:Type", ns_body)
+		try:
+			Intensity = Body.find(".//atom:Intensity/atom:Observation", ns_body)
+			CodeType = Intensity.findall(".//atom:CodeDefine/atom:Type", ns_body)
+		except:
+			CodeType = []
 
 		# 震度情報を１つずつ解析してクラスに格納していく
 		for n in CodeType:
@@ -154,7 +159,7 @@ class EQPlotter:
 				rets += f"\nこの地震による津波の心配はありません"
 			
 			rets += f"\n震源は{self.eqi_.hypocenter}"
-			rets += f"\n深さ{self.eqi_.PrintDepth()}　マグニチュード{self.eqi_.magnitude}"
+			rets += f"\n深さ{self.eqi_.PrintDepth()}　マグニチュード{self.eqi_.magnitude or "不明"}"
 			rets += self.eqi_.intensity_city.PrintIntensity()
 		else:
 			# 震度速報
