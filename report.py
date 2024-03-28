@@ -295,9 +295,10 @@ class EQPlotter:
 		img_add = cv2.imread(os.path.join(self.images_path_, "hypocenter.png"), cv2.IMREAD_UNCHANGED)
 		img_add = cv2.resize(img_add, dsize=None, fx=zoom, fy=zoom, interpolation=cv2.INTER_LINEAR)
 		
-		x, y = self.GeoCoord2Pixel(bound, lon, lat)
-		cx, cy = GetCenterPixel(img_add)
-		self.PlotImage([(x - cx, y - cy)], img_add)
+		if not(lon is None or lat is None):
+			x, y = self.GeoCoord2Pixel(bound, lon, lat)
+			cx, cy = GetCenterPixel(img_add)
+			self.PlotImage([(x - cx, y - cy)], img_add)
 
 	# x, y は地図としての座標 (lon, lat)
 	def PlotIntensity(self, coords: list, bound: tuple, intensity: str, zoom=1.0) -> None:

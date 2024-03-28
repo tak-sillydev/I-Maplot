@@ -7,6 +7,7 @@ import post
 import pickle
 import time
 import os
+import traceback
 
 from logging import INFO, DEBUG, WARNING, ERROR, CRITICAL
 from gc import collect
@@ -52,7 +53,7 @@ def GetEntryList(root: Element, ns: dict) -> list:
 	"""
 		XML フィードから各項目情報を取得し、リストにまとめて返す。
 		root: XML 全体を示すオブジェクト
-		ns: XML 名前空間。config.json により規定される
+		ns:   XML 名前空間。config.json により規定される
 	"""
 	lsentry = []
 	node = root.findall("atom:entry", ns)
@@ -73,9 +74,9 @@ def CheckId(root: Element, feedctl: FeedControl, ns: dict) -> bool:
 	"""
 		FeedControl に記録された XML の ID と 取得した XML フィードの ID を比較する。
 		渡された XML の ID の方が新しければ FeedControl を更新して True を返す。
-		root: XML 全体を示すオブジェクト
+		root:    XML 全体を示すオブジェクト
 		feedctl: FeedControl クラス。 XML の ID 比較用
-		ns: XML 名前空間。config.json により規定される
+		ns:      XML 名前空間。config.json により規定される
 	"""
 	current = root.find("atom:id", ns).text
 	ret = True if current == feedctl.xmlid else False
@@ -83,14 +84,14 @@ def CheckId(root: Element, feedctl: FeedControl, ns: dict) -> bool:
 	feedctl.xmlid = current
 	return ret
 
-def OnRequestException(feedctl: FeedControl, config: dict, logger: log.Logger, e: Exception) -> None:
+def OnRequestException(feedctl: FeedControl, config: dict, e: Exception) -> None:
 	"""
 		気象庁 XML の取得に何らかの理由により失敗した場合に呼び出される。
 		feedctl: FeedControl クラス。連続エラー回数を記録するために使用
-		config: config.json からの設定情報
-		logger: ロギングハンドラ
-		e: 発生した例外に関する情報
+		config:  config.json からの設定情報
+		e:       発生した例外に関する情報
 	"""
+	logger = log.getLogger(__name__)
 	logger.warning("地震情報の取得に失敗しました")
 	logger.warning(e)
 	feedctl.reqerr_count += 1
@@ -98,25 +99,23 @@ def OnRequestException(feedctl: FeedControl, config: dict, logger: log.Logger, e
 	if feedctl.reqerr_count % config["xmlfeed"]["request"]["error_count"] == 0:
 		logger.error(f"地震情報の取得に{feedctl.reqerr_count}回連続で失敗しました。ログを確認してください。")
 
-def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict, logger: log.Logger) -> None:
+def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 	"""
 		気象庁 XML フィードから地震火山情報を取得し、地震に関する情報を抜き出す。
 		抜き出したエントリは EQPlotter クラスに渡され震度地図を描画、返された地図をポストする。
 		I-Maplot の中枢を担う部分。
 		feedctl: FeedControl クラス。フィードの取得により適宜更新されていく
-		ns: XML 名前空間。XML からの情報取得に使用
-		config: config.json からの設定情報
-		logger: ロギングハンドラ
+		ns:      XML 名前空間。XML からの情報取得に使用
+		config:  config.json からの設定情報
 	"""
+	logger = log.getLogger(__name__)
 	try:
 		# 最終更新時刻以降の情報を（あれば）返すよう HTTP ヘッダに記載する。
 		# 更新がない場合、HTTP 304 と共に長さ 0 のデータが返るので無駄なダウンロードを節約することができる。
 		header = { "If-Modified-Since": feedctl.last_update.strftime("%a, %d %b %Y %H:%M:%S GMT") }
 		response = requests.get(config["xmlfeed"]["request"]["address"], headers=header)
 		response.raise_for_status()
-	except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
-		OnRequestException(feedctl, config, logger, e)
-	else:
+
 		# 更新がない場合（HTTP 304）は読み飛ばす
 		if response.status_code == 200:
 			feedctl.reqerr_count = 0
@@ -143,6 +142,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict, logger: lo
 					for l in lsentry:
 						response = requests.get(l.link)
 						response.encoding = response.apparent_encoding
+						response.raise_for_status()
 
 						eqp = EQPlotter(config)
 						eqp.ParseXML(response.text)
@@ -151,21 +151,30 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict, logger: lo
 						imgpath = eqp.DrawMap("3" if level >= 3 else "1")
 						message = eqp.GetMessage()
 						
+						# 更新（発表）時刻は UTC なので JST(+9h) に直す
 						updated_tmz = l.updated_time.astimezone(datetime.timezone(datetime.timedelta(hours=9)))
 						post_fmt = "【" +\
 							("震度速報" if "震度速報" in l.title else "震源・震度情報") +\
 							updated_tmz.strftime(" %Y-%m-%d %H:%M ") + "気象庁発表】{}"
 						
+						# ログに地震情報を記録、同時に X へポスト
 						logger.info("地震情報：\n" + post_fmt.format(message))
 						message = post.Adjust_PostLen(post_fmt, message)
 						post.Post(config["postauth"], message, imgpath)
+						# del しておくとメモリの消費を防げる（1 回の描画に 100 MB 近く使っちゃうので……）
 						del eqp
 					
+					# ガベージコレクションを強制実行することでさらにメモリ消費を抑える作戦
 					collect()
-			else:
-				logger.debug("地震情報：新しい地震の情報はありません")
-		else:
-			logger.debug("地震情報：新しい地震の情報はありません")
+					return
+		# 更新情報なし / XML ID に変更なし / 地震情報エントリに更新なし の場合はここにくる
+		logger.info("地震情報：新しい地震の情報はありません")
+
+	except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+		OnRequestException(feedctl, config, e)
+	except Exception:
+		# これの呼び出し元（Scheduler.caller_）でも例外は補足しているのでなくても良い
+		logger.error(traceback.format_exc())
 	finally:
 		feedctl.PickleMyself()
 
@@ -230,7 +239,7 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		sched = Scheduler(
 			interval_sec,
 			GetJMAXMLFeed_Eqvol,
-			(feedctl, ns, conf, logger)	# 実行する関数に渡す引数のリスト
+			(feedctl, ns, conf)	# 実行する関数に渡す引数のリスト
 		)
 		sched.start()
 
@@ -264,14 +273,15 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 					break
 	
 			except struct.error as e:
-				logger.info(e)
-			except Exception as e:
-				logger.error(e)
+				# ソケット メッセージの解析に関する例外
+				logger.warning(e)
+			except Exception:
+				logger.error(traceback.format_exc())
 
 		sched.stop()
 		feedctl.PickleMyself()
-	except Exception as e:
-		logger.error(e)
+	except Exception:
+		logger.error(traceback.format_exc())
 	else:
 		logger.info("システムは正常に終了しました")
 	finally:

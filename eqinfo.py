@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Python >= v3.7
 import re
+import log
 
 from datetime import datetime
 
@@ -31,6 +32,10 @@ class IntensityHolder:
 	
 	# list of tuple (name, intensity) 
 	def AddIntensity(self, lsint: list) -> None:
+		"""
+			震度を self.intensity に追加する。
+			lsint: （地域名, 震度）のタプルを要素として持つリスト
+		"""
 		if len(lsint) == 0: return
 
 		for l in lsint:
@@ -45,6 +50,9 @@ class IntensityHolder:
 					break
 
 	def PrintIntensity(self) -> str:
+		"""
+			self.intensity をもとに、震度情報文を出力する。
+		"""
 		f = True
 		rets = ""
 
@@ -65,36 +73,22 @@ class IntensityHolder:
 	
 	# "強い" / "やや強い" / ""
 	def PrintEQLevel(self) -> str:
+		""" 震度速報時に、最大震度からおおよその地震の大きさを出力する。 """
 		return self.eqlevel_str[self.eqlevel]
 
 class EQInfo:
-	id: str		= ""
-	code: list	= None
-	origin_dt: datetime	= None
-
-	# 震源に関する情報
-	hypocenter: str		= ""
-	latitude: float		= None
-	longitude: float	= None
-	magnitude: float	= None
-	depth: int	= None
-
-	# 震度に関する情報
-	intensity_pref: IntensityHolder = None
-	intensity_area: IntensityHolder = None
-	intensity_city: IntensityHolder = None
-
 	def __init__(self, config: dict) -> None:
 		self.origin_dt: datetime	= None
+		self.logger: log.Logger		= log.getLogger(__name__)
 		self.code: list	= None
 		self.id: str	= ""
 
 		# 震源に関する情報
 		self.hypocenter: str	= ""
-		self.latitude: float	= 0.0
-		self.longitude: float	= 0.0
-		self.magnitude: float	= 0.0
-		self.depth: int			= 0
+		self.latitude: float	= None
+		self.longitude: float	= None
+		self.magnitude: float	= None
+		self.depth: int			= None
 
 		# 震度に関する情報
 		self.intensity_pref: IntensityHolder = IntensityHolder(config)
@@ -102,15 +96,22 @@ class EQInfo:
 		self.intensity_city: IntensityHolder = IntensityHolder(config)
 
 	def ParseHypocenter(self, s: str):
+		"""
+			震源の緯度経度、深さを解析する。
+			s: 解析する文字列（Coordinate タグ）
+		"""
 		ls = re.findall("[+-][0-9.]+", s)
 		try:
 			self.latitude  = float(ls[0])
 			self.longitude = float(ls[1])
 			self.depth = int(ls[2]) / -1000
 		except IndexError:
-			pass
+			self.logger.warning(f"Coordinate's length too fewer: {len(ls)}")
 
 	def PrintDepth(self) -> str:
+		"""
+			震源の深さを出力する。
+		"""
 		if self.depth is None:
 			return "不明"
 		elif self.depth < 10:

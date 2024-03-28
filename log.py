@@ -41,7 +41,7 @@ class MailHandler:
 class TLS_SMTPHandler(handlers.SMTPHandler):
 	"""
 		デフォルトの logging.SMTPHandler は Gmail の SMTP に対応していない（TLS 認証がない）
-		ので、クラスを継承、ログ送出関数（emit）をオーバーライド
+		なので、クラスを継承、ログ送出関数（emit）をオーバーライド
 		参考 : https://qiita.com/ryoheiszk/items/8b072adeb368cc35588d
 	"""
 	def emit(self, record):
@@ -59,6 +59,14 @@ class TLS_SMTPHandler(handlers.SMTPHandler):
 def SendMail(
 		server_addr: str, server_port: int, addr_from: str,
 		addr_to: str, cred_addr: str, password: str, subject: str, body: str) -> None:
+	"""
+		SMTP（TLS対応）を使用してメールを送信する。
+		server_addr / server_port: SMTP 取り扱いサーバアドレス及びポート
+		addr_from / addr_to:  メール送信元／先アドレス
+		cred_addr / password: ログイン用ユーザ名（アドレス）及びパスワード
+		subject: メールのタイトル
+		body:    本文
+	"""
 	smtpobj = smtplib.SMTP(server_addr, server_port)
 	smtpobj.starttls()
 	smtpobj.login(cred_addr, password)
@@ -73,8 +81,15 @@ def SendMail(
 	smtpobj.close()
 
 def set_logger(level: int, mhd: MailHandler, config_path: str, conf_enctype : str = "utf-8") -> None:
-	# 全体のログ設定
-	# ファイルに書き出す。ログが100KB溜まったらバックアップにして新しいファイルを作る。
+	"""
+		全体（ルート）のログ設定。
+		ファイルに書き出す。ログが 100 KB 溜まったらバックアップにして新しいファイルを作る。
+		ERROR 以上のレベルはメールにて送信する。
+		level: 出力レベル。DEBUG, INFO, WARNING, ERROR, CRITICAL のいずれか
+		mhd:   メール送信ハンドラ。事前に送信先を設定しておく必要あり。
+		config_path:  config.json のパス。ログ設定は main() で設定をいろいろ読み込む前に実行するので、独自に読み込む必要がある。
+		conf_enctype: config.json の文字コード。
+	"""
 	with open(config_path, "r", encoding=conf_enctype) as f:
 		conf = json.load(f)
 		logdir  = conf["paths"]["log"]["dir"]
@@ -93,11 +108,13 @@ def set_logger(level: int, mhd: MailHandler, config_path: str, conf_enctype : st
 		with open(os.path.join(logdir, logfile), "w"): pass
 		rotating_handler = handlers.RotatingFileHandler(*rotating_handler_args)
 
-	format = Formatter("%(asctime)s : [%(levelname)s] in %(filename)s - %(message)s")
+	# アーカイブ機能付き ファイル ロギングハンドラ
+	format = Formatter("%(asctime)s : [%(levelname)s] in module %(name)s - %(message)s")
 	rotating_handler.setFormatter(format)
 	rotating_handler.setLevel(level)
 	root_logger.addHandler(rotating_handler)
 
+	# メール ロギングハンドラ
 	smtp_handler = TLS_SMTPHandler(
 		mailhost=(mhd.server_addr, mhd.server_port),
 		fromaddr=mhd.addr_from,
@@ -105,7 +122,7 @@ def set_logger(level: int, mhd: MailHandler, config_path: str, conf_enctype : st
 		subject="I-Maplot ERROR log",
 		credentials=(mhd.addr_from, mhd.password)
 	)
-	format = Formatter("%(asctime)s : [%(levelname)s] in %(filename)s\n%(message)s")
+	format = Formatter("%(asctime)s : [%(levelname)s]\nmodule %(name)s\n%(message)s")
 	smtp_handler.setLevel(ERROR)
 	smtp_handler.setFormatter(format)
 	root_logger.addHandler(smtp_handler)
