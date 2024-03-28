@@ -168,7 +168,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 					collect()
 					return
 		# 更新情報なし / XML ID に変更なし / 地震情報エントリに更新なし の場合はここにくる
-		logger.info("地震情報：新しい地震の情報はありません")
+		logger.debug("地震情報：新しい地震の情報はありません")
 
 	except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
 		OnRequestException(feedctl, config, e)
@@ -187,7 +187,7 @@ def SendMail_SystemStop(mhd: log.MailHandler) -> None:
 
 	mhd.send(
 		f"{datetime.datetime.now()}\n" +\
-		f"==== これはデバッグ環境からの通知です ====\n" if fDebug else "" +\
+		(f"==== これはデバッグ環境からの通知です ====\n" if fDebug else "") +\
 		"I-Maplot は動作を停止・終了しました。ログを確認してください。"
 	)
 
