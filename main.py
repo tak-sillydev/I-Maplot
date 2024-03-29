@@ -91,7 +91,7 @@ def OnRequestException(feedctl: FeedControl, config: dict, e: Exception) -> None
 		config:  config.json からの設定情報
 		e:       発生した例外に関する情報
 	"""
-	logger = log.getLogger(__name__)
+	logger = log.getLogger("{}.{}".format(config["app_name"], __name__))
 	logger.warning("地震情報の取得に失敗しました")
 	logger.warning(e)
 	feedctl.reqerr_count += 1
@@ -108,7 +108,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 		ns:      XML 名前空間。XML からの情報取得に使用
 		config:  config.json からの設定情報
 	"""
-	logger = log.getLogger(__name__)
+	logger = log.getLogger("{}.{}".format(config["app_name"], __name__))
 	try:
 		# 最終更新時刻以降の情報を（あれば）返すよう HTTP ヘッダに記載する。
 		# 更新がない場合、HTTP 304 と共に長さ 0 のデータが返るので無駄なダウンロードを節約することができる。
@@ -193,12 +193,12 @@ def SendMail_SystemStop(mhd: log.MailHandler) -> None:
 
 def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 	try:
-		log.set_logger(INFO, mhd, CONFIG_PATH, CONFIG_ENCTYPE)
-		logger = log.getLogger(__name__)
-		logger.info("JMAEQ I-Maplot システム開始")
-
 		with open(CONFIG_PATH, "r", encoding=CONFIG_ENCTYPE) as f:
 			conf = json.load(f)
+		
+		log.set_logger(INFO, mhd, conf)
+		logger = log.getLogger("{}.{}".format(conf["app_name"], __name__))
+		logger.info("JMAEQ I-Maplot システム開始")
 
 		interval_sec: int = conf["interval_sec"]
 		feedctl_path: str = conf["paths"]["feedctl"]
@@ -239,6 +239,7 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		sched = Scheduler(
 			interval_sec,
 			GetJMAXMLFeed_Eqvol,
+			conf,
 			(feedctl, ns, conf)	# 実行する関数に渡す引数のリスト
 		)
 		sched.start()

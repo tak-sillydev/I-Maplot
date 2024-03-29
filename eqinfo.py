@@ -79,7 +79,7 @@ class IntensityHolder:
 class EQInfo:
 	def __init__(self, config: dict) -> None:
 		self.origin_dt: datetime	= None
-		self.logger: log.Logger		= log.getLogger(__name__)
+		self.logger: log.Logger		= log.getLogger("{}.{}".format(config["app_name"], __name__))
 		self.code: list	= None
 		self.id: str	= ""
 
