@@ -48,7 +48,7 @@ class EQPlotter:
 			config: config.json に規定された設定情報
 		"""
 		self.assistant_path_: str = config["paths"]["assistant"]
-		self.areamap_path_: str = config["paths"]["areamap"]
+		self.areamap_path_: str = config["areamap"]["output"]
 		self.images_path_: str = config["paths"]["images"]
 		self.output_path_: str = config["paths"]["output"]
 		self.ns_: dict = config["xmlfeed"]["xml_ns"]["report"]

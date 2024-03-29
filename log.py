@@ -80,23 +80,20 @@ def SendMail(
 	smtpobj.send_message(message)
 	smtpobj.close()
 
-def set_logger(level: int, mhd: MailHandler, config_path: str, conf_enctype : str = "utf-8") -> None:
+def set_logger(level: int, mhd: MailHandler, config: dict) -> None:
 	"""
 		全体（ルート）のログ設定。
 		ファイルに書き出す。ログが 100 KB 溜まったらバックアップにして新しいファイルを作る。
 		ERROR 以上のレベルはメールにて送信する。
 		level: 出力レベル。DEBUG, INFO, WARNING, ERROR, CRITICAL のいずれか
 		mhd:   メール送信ハンドラ。事前に送信先を設定しておく必要あり。
-		config_path:  config.json のパス。ログ設定は main() で設定をいろいろ読み込む前に実行するので、独自に読み込む必要がある。
-		conf_enctype: config.json の文字コード。
+		config: config.json から得た設定情報
 	"""
-	with open(config_path, "r", encoding=conf_enctype) as f:
-		conf = json.load(f)
-		logdir  = conf["paths"]["log"]["dir"]
-		logfile = conf["paths"]["log"]["file"]
+	logdir  = config["paths"]["log"]["dir"]
+	logfile = config["paths"]["log"]["file"]
 	
-	root_logger = getLogger()
-	root_logger.setLevel(level)
+	logger_approot = getLogger(config["app_name"])
+	logger_approot.setLevel(level)
 
 	# filename, mode, maxBytes, backupCount, encoding
 	rotating_handler_args = (os.path.join(logdir, logfile), "a", 100 * 1024, 3, "utf-8")
@@ -109,10 +106,10 @@ def set_logger(level: int, mhd: MailHandler, config_path: str, conf_enctype : st
 		rotating_handler = handlers.RotatingFileHandler(*rotating_handler_args)
 
 	# アーカイブ機能付き ファイル ロギングハンドラ
-	format = Formatter("%(asctime)s : [%(levelname)s] in module %(name)s - %(message)s")
+	format = Formatter("%(asctime)s : [%(levelname)s] in %(filename)s - %(message)s")
 	rotating_handler.setFormatter(format)
 	rotating_handler.setLevel(level)
-	root_logger.addHandler(rotating_handler)
+	logger_approot.addHandler(rotating_handler)
 
 	# メール ロギングハンドラ
 	smtp_handler = TLS_SMTPHandler(
@@ -122,8 +119,8 @@ def set_logger(level: int, mhd: MailHandler, config_path: str, conf_enctype : st
 		subject="I-Maplot ERROR log",
 		credentials=(mhd.addr_from, mhd.password)
 	)
-	format = Formatter("%(asctime)s : [%(levelname)s]\nmodule %(name)s\n%(message)s")
+	format = Formatter("%(asctime)s : [%(levelname)s]\nFrom %(filename)s -\n%(message)s")
 	smtp_handler.setLevel(ERROR)
 	smtp_handler.setFormatter(format)
-	root_logger.addHandler(smtp_handler)
+	logger_approot.addHandler(smtp_handler)
 	return

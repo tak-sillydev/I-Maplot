@@ -63,11 +63,12 @@ if __name__ == "__main__":
 	file.close()
 	try:
 		paths = conf["paths"]
-		shape_path = paths["shapefile"]
-		areamap_path = paths["areamap"]
+		areamap = conf["areamap"]
+		shape_path = areamap["shapefile"]
+		areamap_path = areamap["output"]
 		assistant_path = paths["assistant"]
 
-		simplify_tolerance = conf["simplify_tolerance"]
+		simplify_tolerance = areamap["simplify_tolerance"]
 
 		pref = conf["pref"]
 		region = conf["region"]

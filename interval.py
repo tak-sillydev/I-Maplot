@@ -11,9 +11,9 @@ class Scheduler:
 		Scheduler クラス
 		callback に登録した特定の関数を、sec 秒おきに定期実行する。
 	"""
-	def __init__(self, sec: int, callback, args: tuple = None) -> None:
+	def __init__(self, sec: int, callback, config: dict, args: tuple = None) -> None:
 		self.timer_: threading.Timer	= None
-		self.logger_: log.Logger		= log.getLogger(__name__)
+		self.logger_: log.Logger		= log.getLogger("{}.{}".format(config["app_name"], __name__))
 		self.callback_		= callback
 		self.sec_: int		= sec
 		self.args_: tuple	= args
