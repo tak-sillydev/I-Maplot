@@ -58,19 +58,23 @@ def MakeAssistantData(row, region):
 
 if __name__ == "__main__":
 	print("Reading Configs...", end="", flush=True)
-	file = open("config.json", "r", encoding="utf-8")
-	conf = json.load(file)
-	file.close()
 	try:
-		paths = conf["paths"]
-		shape_path = paths["shapefile"]
-		areamap_path = paths["areamap"]
-		assistant_path = paths["assistant"]
+		with open("config.json", "r", encoding="utf-8") as f:
+			conf = json.load(f)
 
-		simplify_tolerance = conf["simplify_tolerance"]
+		areamap: dict = conf["areamap"]
+		shape_path: str     = areamap["shapefile"]
+		areamap_path: str   = areamap["output"]
+		assistant_path: str = conf["paths"]["assistant"]
 
-		pref = conf["pref"]
-		region = conf["region"]
+		simplify_tolerance = areamap["simplify_tolerance"]
+
+		edge: str = areamap["color"]["edge"]
+		face: str = areamap["color"]["face"]
+		back: str = areamap["color"]["back"]
+
+		pref: dict   = conf["pref"]
+		region: dict = conf["region"]
 	except:
 		print("\nFAILED: Couldn't read config")
 		exit()
@@ -83,7 +87,7 @@ if __name__ == "__main__":
 
 	fig = plt.figure()
 	ax  = fig.add_subplot()
-	ax.set_facecolor("cornflowerblue")
+	ax.set_facecolor(back)
 
 	# データの簡略化
 	print("Simplifying maps...", end="", flush=True)
@@ -93,7 +97,7 @@ if __name__ == "__main__":
 
 	# 細分区域の描画
 	print("Ploting each area...", end="", flush=True)
-	smp_map.plot(ax=ax, edgecolor="silver", facecolor="wheat", linewidth=0.5)
+	smp_map.plot(ax=ax, edgecolor=edge, facecolor=face, linewidth=0.5)
 	print("done", flush=True)
 
 	# 県の枠線描画 (データの簡略化はこの中で行う)
@@ -102,7 +106,7 @@ if __name__ == "__main__":
 		gpd_map,
 		pref,
 		ax=ax,
-		edgecolor="darkgray",
+		edgecolor=edge,
 		facecolor="None",
 		linewidth=1.0,
 		simplify_tolerance=simplify_tolerance

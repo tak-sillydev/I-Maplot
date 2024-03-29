@@ -17,11 +17,18 @@
 		"やや強い", 
 		"強い"
 	],
-	"simplify_tolerance": 0.001,
+	"areamap": {
+		"shapefile": "./20190125_AreaForecastLocalE_GIS/地震情報／細分区域.shp",
+		"output": "./data/areamap.pkl",
+		"simplify_tolerance": 0.001,
+		"color": {
+			"edge": "#400000",
+			"face": "#A07060",
+			"back": "#0000D0"
+		}
+	},
 	"interval_sec": 30,
 	"paths": {
-		"shapefile": "./20190125_AreaForecastLocalE_GIS/地震情報／細分区域.shp",
-		"areamap": "./data/areamap.pkl",
 		"assistant": "./data/assistant.pkl",
 		"feedctl": "./data/feedctl.pkl",
 		"images": "./images",

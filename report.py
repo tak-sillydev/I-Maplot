@@ -48,10 +48,11 @@ class EQPlotter:
 			config: config.json に規定された設定情報
 		"""
 		self.assistant_path_: str = config["paths"]["assistant"]
-		self.areamap_path_: str = config["paths"]["areamap"]
-		self.images_path_: str = config["paths"]["images"]
-		self.output_path_: str = config["paths"]["output"]
-		self.ns_: dict = config["xmlfeed"]["xml_ns"]["report"]
+		self.images_path_: str    = config["paths"]["images"]
+		self.output_path_: str    = config["paths"]["output"]
+		self.areamap_path_: str   = config["areamap"]["output"]
+		self.backcolor: str = config["areamap"]["color"]["back"]
+		self.ns_: dict      = config["xmlfeed"]["xml_ns"]["report"]
 
 	def ParseXML(self, xml: str):
 		"""
@@ -243,7 +244,7 @@ class EQPlotter:
 		tmppath = f"./{self.eqi_.origin_dt.strftime("%Y%m%d_%H%M%S")}_tmp.png"
 		self.fig_.savefig(
 			tmppath,
-			facecolor="cornflowerblue",
+			facecolor=self.backcolor,
 			bbox_inches="tight",
 			pad_inches=0,
 			dpi=300
