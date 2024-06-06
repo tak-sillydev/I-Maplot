@@ -141,26 +141,32 @@
 		"password": ""
 	},
 	"sockinfo": {
-		"timeout_sec": 0.0,
+		"timeout_sec": 10.0,
+		"retries": 0,
 		"max_len": 1024,
 		"charset": "utf-8",
 		"code": {
 			"exit": 1,
 			"alive": 2
 		},
-		"request": {
-			"host": "",
-			"port": 0,
-			"default_msg": {
-				"exit": "exit.py was executed.",
-				"alive": "Is JMAEQ I-Maplot ALIVE?"
+		"address": {
+			"request": {
+				"host": "127.0.0.1",
+				"port": 18765
+			},
+			"accept": {
+				"host": "0.0.0.0",
+				"port": 18765
 			}
 		},
-		"answer": {
-			"host": "",
-			"port": 0,
-			"default_msg": {
-				"alive": "JMAEQ I-Maplot is still ALIVE."
+		"message": {
+			"request": {
+				"exit": "exit.py was executed.",
+				"alive": "Is JMAEQ I-Maplot ALIVE?"
+			},
+			"answer": {
+				"exit": "OK, the system will be shutted down.",
+				"alive": "Yes, the system is still alive."
 			}
 		}
 	},

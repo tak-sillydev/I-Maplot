@@ -206,10 +206,9 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		ns: dict	= conf["xmlfeed"]["xml_ns"]["feed"]
 
 		# ソケット（exit, alive）関連情報
-		sockinfo: dict	= conf["sockinfo"]
-		codeinfo: dict	= sockinfo["code"]
-		req: dict	= sockinfo["request"]
-		ans: dict	= sockinfo["answer"]
+		sockinfo: dict = conf["sockinfo"]
+		codeinfo: dict = sockinfo["code"]
+		addrinfo: dict = sockinfo["address"]["accept"]
 
 		# FeedControl の読み込み
 		try:
@@ -226,14 +225,14 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 			os.mkdir(output_path)
 
 		# デフォルトのタイムアウト時間を設定
-		setdefaulttimeout(conf["sockinfo"]["timeout_sec"])
+		setdefaulttimeout(sockinfo["timeout_sec"])
 
 		# このコマンド受付ソケットだけは無限に待ち受け状態（ブロッキング状態、タイムアウトなし）
-		sock_req = socket(AF_INET, SOCK_STREAM)
-		sock_req.settimeout(None)
-		sock_req.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-		sock_req.bind((req["host"], req["port"]))
-		sock_req.listen()
+		sock = socket(AF_INET, SOCK_STREAM)
+		sock.settimeout(None)
+		sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+		sock.bind((addrinfo["host"], addrinfo["port"]))
+		sock.listen()
 
 		# interval_sec 秒おきに GetJMAXMLFeed_Eqvol 関数を実行
 		sched = Scheduler(
@@ -247,9 +246,9 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		while True:
 			try:
 				# exit, alive からの接続を受け付ける
-				conn, _ = sock_req.accept()
+				conn, _ = sock.accept()
 				data = conn.recv(sockinfo["max_len"])
-				conn.close()
+				# conn.close()
 
 				# メッセージ種別、メッセージ内容を解析
 				code, bmsg = struct.unpack("b" + str(len(data) - 1) + "s", data)
@@ -258,19 +257,24 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 				# alive -> 生存の表示としてメッセージを送り返す
 				if code == codeinfo["alive"]:
 					time.sleep(0.5)	# alive 側の受信ソケット準備が完了するまでのパディングを入れてみた
-					sock_ans = socket(AF_INET, SOCK_STREAM)
-					sock_ans.connect((ans["host"], ans["port"]))
 
-					msg = ans["default_msg"]["alive"].encode(sockinfo["charset"])
+					msg = sockinfo["message"]["answer"]["alive"].encode(sockinfo["charset"])
 					data = struct.pack("b" + str(len(msg)) + "s", code, msg)
 
-					sock_ans.send(data)
-					sock_ans.close()
+					conn.send(data)
+					conn.close()
 
 				# exit -> プログラム終了
 				elif code == codeinfo["exit"]:
 					if len(msg) > 0:
+						time.sleep(0.5)	# alive 側の受信ソケット準備が完了するまでのパディングを入れてみた
 						logger.error(msg + " - message on EXIT")
+
+						bmsg = sockinfo["message"]["answer"]["exit"].encode(sockinfo["charset"])
+						data = struct.pack("b" + str(len(msg)) + "s", code, bmsg)
+
+						conn.send(data)
+						conn.close()
 					break
 	
 			except struct.error as e:
@@ -286,7 +290,7 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 	else:
 		logger.info("システムは正常に終了しました")
 	finally:
-		sock_req.close()
+		sock.close()
 
 if __name__ == "__main__":
 	CONFIG_PATH = "./config.json"
