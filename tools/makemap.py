@@ -67,7 +67,7 @@ if __name__ == "__main__":
 		areamap_path: str   = areamap["output"]
 		assistant_path: str = conf["paths"]["assistant"]
 
-		simplify_tolerance = areamap["simplify_tolerance"]
+		simplify_tolerance: int = areamap["simplify_tolerance"]
 
 		edge: str = areamap["color"]["edge"]
 		face: str = areamap["color"]["face"]
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 		ax=ax,
 		edgecolor=edge,
 		facecolor="None",
-		linewidth=1.0,
+		linewidth=1.5,
 		simplify_tolerance=simplify_tolerance
 	)
 	print("all done", flush=True)
