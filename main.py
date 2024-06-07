@@ -115,6 +115,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 		header = { "If-Modified-Since": feedctl.last_update.strftime("%a, %d %b %Y %H:%M:%S GMT") }
 		response = requests.get(config["xmlfeed"]["request"]["address"], headers=header)
 		response.raise_for_status()
+		feedctl.last_access = datetime.datetime.now(tz=datetime.timezone.utc)
 
 		# 更新がない場合（HTTP 304）は読み飛ばす
 		if response.status_code == 200:
@@ -158,6 +159,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 							updated_tmz.strftime(" %Y-%m-%d %H:%M ") + "気象庁発表】{}"
 						
 						# ログに地震情報を記録、同時に X へポスト
+						feedctl.last_msg = post_fmt.format(message)
 						logger.info("地震情報：\n" + post_fmt.format(message))
 						message = post.Adjust_PostLen(post_fmt, message)
 						post.Post(config["postauth"], message, imgpath)
@@ -206,10 +208,9 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		ns: dict	= conf["xmlfeed"]["xml_ns"]["feed"]
 
 		# ソケット（exit, alive）関連情報
-		sockinfo: dict	= conf["sockinfo"]
-		codeinfo: dict	= sockinfo["code"]
-		req: dict	= sockinfo["request"]
-		ans: dict	= sockinfo["answer"]
+		sockinfo: dict = conf["sockinfo"]
+		codeinfo: dict = sockinfo["code"]
+		addrinfo: dict = sockinfo["address"]["accept"]
 
 		# FeedControl の読み込み
 		try:
@@ -220,20 +221,23 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 			logger.warning("FeedControl が見つかりませんでした。作成します。")
 			feedctl = FeedControl(feedctl_path)
 		
+		# システム開始時刻を記録
+		feedctl.system_start = datetime.datetime.now(tz=datetime.timezone.utc)
+
 		# 画像出力先の存在確認（存在しない場合は作成）
 		if not os.path.isdir(output_path):
 			logger.warning(f"画像出力先 {output_path} が見つかりませんでした。作成します。")
 			os.mkdir(output_path)
 
 		# デフォルトのタイムアウト時間を設定
-		setdefaulttimeout(conf["sockinfo"]["timeout_sec"])
+		setdefaulttimeout(sockinfo["timeout_sec"])
 
 		# このコマンド受付ソケットだけは無限に待ち受け状態（ブロッキング状態、タイムアウトなし）
-		sock_req = socket(AF_INET, SOCK_STREAM)
-		sock_req.settimeout(None)
-		sock_req.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
-		sock_req.bind((req["host"], req["port"]))
-		sock_req.listen()
+		sock = socket(AF_INET, SOCK_STREAM)
+		sock.settimeout(None)
+		sock.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+		sock.bind((addrinfo["host"], addrinfo["port"]))
+		sock.listen()
 
 		# interval_sec 秒おきに GetJMAXMLFeed_Eqvol 関数を実行
 		sched = Scheduler(
@@ -247,9 +251,9 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 		while True:
 			try:
 				# exit, alive からの接続を受け付ける
-				conn, _ = sock_req.accept()
+				conn, _ = sock.accept()
 				data = conn.recv(sockinfo["max_len"])
-				conn.close()
+				# conn.close()
 
 				# メッセージ種別、メッセージ内容を解析
 				code, bmsg = struct.unpack("b" + str(len(data) - 1) + "s", data)
@@ -258,19 +262,29 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 				# alive -> 生存の表示としてメッセージを送り返す
 				if code == codeinfo["alive"]:
 					time.sleep(0.5)	# alive 側の受信ソケット準備が完了するまでのパディングを入れてみた
-					sock_ans = socket(AF_INET, SOCK_STREAM)
-					sock_ans.connect((ans["host"], ans["port"]))
+					msg  = sockinfo["message"]["answer"]["alive"] + "\n" +\
+							"System started at: " + feedctl.system_start.isoformat() + "\n" +\
+							"Last access: " + feedctl.last_access.isoformat() + "\n" +\
+							"Last update: " + feedctl.last_update.isoformat() + "\n" +\
+							"Last Earthquake: " + feedctl.last_eq.isoformat() + "\n" +\
+							feedctl.last_msg
+					bmsg = msg.encode(sockinfo["charset"])
+					data = struct.pack("b" + str(len(bmsg)) + "s", code, bmsg)
 
-					msg = ans["default_msg"]["alive"].encode(sockinfo["charset"])
-					data = struct.pack("b" + str(len(msg)) + "s", code, msg)
-
-					sock_ans.send(data)
-					sock_ans.close()
+					conn.send(data)
+					conn.close()
 
 				# exit -> プログラム終了
 				elif code == codeinfo["exit"]:
 					if len(msg) > 0:
+						time.sleep(0.5)	# alive 側の受信ソケット準備が完了するまでのパディングを入れてみた
 						logger.error(msg + " - message on EXIT")
+
+						bmsg = sockinfo["message"]["answer"]["exit"].encode(sockinfo["charset"])
+						data = struct.pack("b" + str(len(bmsg)) + "s", code, bmsg)
+
+						conn.send(data)
+						conn.close()
 					break
 	
 			except struct.error as e:
@@ -286,7 +300,7 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 	else:
 		logger.info("システムは正常に終了しました")
 	finally:
-		sock_req.close()
+		sock.close()
 
 if __name__ == "__main__":
 	CONFIG_PATH = "./config.json"

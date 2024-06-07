@@ -14,4 +14,5 @@ if __name__ == "__main__":
 	fc = FeedControl(conf["paths"]["feedctl"])
 	fc.last_eq		= datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone.utc)
 	fc.last_update	= datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone.utc)
+	fc.last_msg		= "ダミーデータです。地震情報はありません"
 	fc.PickleMyself()

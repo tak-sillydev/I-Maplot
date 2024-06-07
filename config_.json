@@ -23,9 +23,9 @@
 		"output": "./data/areamap.pkl",
 		"simplify_tolerance": 0.001,
 		"color": {
-			"edge": "#400000",
-			"face": "#A07060",
-			"back": "#0000D0"
+			"edge": "silver",
+			"face": "burlywood",
+			"back": "cornflowerblue"
 		}
 	},
 	"interval_sec": 30,
@@ -95,8 +95,9 @@
 		{ "name": "伊豆諸島", "codestart": "354", "codeend": "358" },
 		{ "name": "小笠原地方", "codestart": "359", "codeend": "359" },
 		{ "name": "関東地方", "codestart": "360", "codeend": "369" },
-		{ "name": "北陸地方", "codestart": "370", "codeend": "410" },
-		{ "name": "甲信地方", "codestart": "411", "codeend": "429" },
+		{ "name": "甲信越地方", "codestart": "370", "codeend": "379" },
+		{ "name": "北陸地方", "codestart": "380", "codeend": "409" },
+		{ "name": "甲信越地方", "codestart": "410", "codeend": "429" },
 		{ "name": "東海地方", "codestart": "430", "codeend": "499" },
 		{ "name": "近畿地方", "codestart": "500", "codeend": "559" },
 		{ "name": "中国地方", "codestart": "560", "codeend": "599" },
@@ -140,26 +141,32 @@
 		"password": ""
 	},
 	"sockinfo": {
-		"timeout_sec": 0.0,
+		"timeout_sec": 10.0,
+		"retries": 0,
 		"max_len": 1024,
 		"charset": "utf-8",
 		"code": {
 			"exit": 1,
 			"alive": 2
 		},
-		"request": {
-			"host": "",
-			"port": 0,
-			"default_msg": {
-				"exit": "exit.py was executed.",
-				"alive": "Is JMAEQ I-Maplot ALIVE?"
+		"address": {
+			"request": {
+				"host": "127.0.0.1",
+				"port": 18765
+			},
+			"accept": {
+				"host": "0.0.0.0",
+				"port": 18765
 			}
 		},
-		"answer": {
-			"host": "",
-			"port": 0,
-			"default_msg": {
-				"alive": "JMAEQ I-Maplot is still ALIVE."
+		"message": {
+			"request": {
+				"exit": "exit.py was executed.",
+				"alive": "Is JMAEQ I-Maplot ALIVE?"
+			},
+			"answer": {
+				"exit": "OK, the system will be shutted down.",
+				"alive": "System alive, info below:"
 			}
 		}
 	},

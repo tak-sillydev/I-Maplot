@@ -9,6 +9,7 @@ share/
 data/
 log/
 out/
+xml/
 *.xml
 
 # セキュリティ上の観点から一旦コミットはしない。
