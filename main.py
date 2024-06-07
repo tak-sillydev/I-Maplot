@@ -115,6 +115,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 		header = { "If-Modified-Since": feedctl.last_update.strftime("%a, %d %b %Y %H:%M:%S GMT") }
 		response = requests.get(config["xmlfeed"]["request"]["address"], headers=header)
 		response.raise_for_status()
+		feedctl.last_access = datetime.datetime.now(tz=datetime.timezone.utc)
 
 		# 更新がない場合（HTTP 304）は読み飛ばす
 		if response.status_code == 200:
@@ -158,6 +159,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 							updated_tmz.strftime(" %Y-%m-%d %H:%M ") + "気象庁発表】{}"
 						
 						# ログに地震情報を記録、同時に X へポスト
+						feedctl.last_msg = post_fmt.format(message)
 						logger.info("地震情報：\n" + post_fmt.format(message))
 						message = post.Adjust_PostLen(post_fmt, message)
 						post.Post(config["postauth"], message, imgpath)
@@ -219,6 +221,9 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 			logger.warning("FeedControl が見つかりませんでした。作成します。")
 			feedctl = FeedControl(feedctl_path)
 		
+		# システム開始時刻を記録
+		feedctl.system_start = datetime.datetime.now(tz=datetime.timezone.utc)
+
 		# 画像出力先の存在確認（存在しない場合は作成）
 		if not os.path.isdir(output_path):
 			logger.warning(f"画像出力先 {output_path} が見つかりませんでした。作成します。")
@@ -257,9 +262,14 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 				# alive -> 生存の表示としてメッセージを送り返す
 				if code == codeinfo["alive"]:
 					time.sleep(0.5)	# alive 側の受信ソケット準備が完了するまでのパディングを入れてみた
-
-					msg = sockinfo["message"]["answer"]["alive"].encode(sockinfo["charset"])
-					data = struct.pack("b" + str(len(msg)) + "s", code, msg)
+					msg  = sockinfo["message"]["answer"]["alive"] + "\n" +\
+							"System started at: " + feedctl.system_start.isoformat() + "\n" +\
+							"Last access: " + feedctl.last_access.isoformat() + "\n" +\
+							"Last update: " + feedctl.last_update.isoformat() + "\n" +\
+							"Last Earthquake: " + feedctl.last_eq.isoformat() + "\n" +\
+							feedctl.last_msg
+					bmsg = msg.encode(sockinfo["charset"])
+					data = struct.pack("b" + str(len(bmsg)) + "s", code, bmsg)
 
 					conn.send(data)
 					conn.close()
@@ -271,7 +281,7 @@ def main(mhd: log.MailHandler, config_path: str, conf_enctype: str = "utf-8"):
 						logger.error(msg + " - message on EXIT")
 
 						bmsg = sockinfo["message"]["answer"]["exit"].encode(sockinfo["charset"])
-						data = struct.pack("b" + str(len(msg)) + "s", code, bmsg)
+						data = struct.pack("b" + str(len(bmsg)) + "s", code, bmsg)
 
 						conn.send(data)
 						conn.close()

@@ -11,12 +11,13 @@ import argparse
 def ConnectwithRetry(host: str, port: int, retries: int=0) -> socket | None:
 	for i in range(retries + 1):
 		try:
+			if i > 0:	print("Retrying...")
+			
 			sock = socket(AF_INET, SOCK_STREAM)
 			sock.connect((host, port))
 			return sock
 		except sockerr as e:
 			print(f"Connection Error: {e}")
-			print("Retrying...")
 
 	return None
 

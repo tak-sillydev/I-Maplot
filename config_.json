@@ -23,9 +23,9 @@
 		"output": "./data/areamap.pkl",
 		"simplify_tolerance": 0.001,
 		"color": {
-			"edge": "#400000",
-			"face": "#A07060",
-			"back": "#0000D0"
+			"edge": "silver",
+			"face": "burlywood",
+			"back": "cornflowerblue"
 		}
 	},
 	"interval_sec": 30,
@@ -166,7 +166,7 @@
 			},
 			"answer": {
 				"exit": "OK, the system will be shutted down.",
-				"alive": "Yes, the system is still alive."
+				"alive": "System alive, info below:"
 			}
 		}
 	},

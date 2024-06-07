@@ -58,7 +58,7 @@ class IntensityHolder:
 
 		for k, v in self.intensity.items():
 			if len(v) == 0: continue
-			if self.eqlevel >= 1 and self.eqlevel_config[k] == 0:
+			if self.eqlevel >= 1 and self.eqlevel_config[k] == 0:	# v1.2 で削除予定
 				continue
 
 			k = k.replace("+", "強")
