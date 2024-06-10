@@ -20,11 +20,7 @@ from interval import Scheduler
 from feedctl import FeedControl
 from report import EQPlotter
 import log
-
-#################################
-### !!! DEBUG OR RELEASE? !!! ###
-fDebug = True
-#################################
+import debugdef
 
 ### class EntryData BEGIN ###
 
@@ -185,11 +181,10 @@ def SendMail_SystemStop(mhd: log.MailHandler) -> None:
 		システム終了時にメールを送信する。
 		mhd: メールによるロギング ハンドラー
 	"""
-	global fDebug
 
 	mhd.send(
 		f"{datetime.datetime.now()}\n" +\
-		(f"==== これはデバッグ環境からの通知です ====\n" if fDebug else "") +\
+		(f"==== これはデバッグ環境からの通知です ====\n" if debugdef.fDebug else "") +\
 		"I-Maplot は動作を停止・終了しました。ログを確認してください。"
 	)
 
@@ -313,6 +308,3 @@ if __name__ == "__main__":
 		main(mhd, CONFIG_PATH, CONFIG_ENCTYPE)
 	
 	print("Exiting...")
-
-#### post 封じられてる（コメントアウト）ので注意
-#### デバッグモード。本番環境に移す前にfDebugをFalseに。

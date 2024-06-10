@@ -1,6 +1,8 @@
 import tweepy
 from twitter_text import parse_tweet
 
+import debugdef
+
 def Adjust_PostLen(post_fmt: str, target: str) -> str:
 	"""
 		投稿時の文字列長を、X 側が受け入れ可能な長さまで切り詰めて調節する。
@@ -40,6 +42,7 @@ def Post(authdict: dict, text: str, img_path: str) -> None:
 	)
 	api = tweepy.API(auth)
 
-	""" ===投稿は現在封じられています=== """
-	#media = api.media_upload(filename=img_path)
-	#client.create_tweet(text=text, media_ids=[media.media_id])
+	# デバッグ時、投稿は封じられる
+	if debugdef.fDebug != True:
+		media = api.media_upload(filename=img_path)
+		client.create_tweet(text=text, media_ids=[media.media_id])
