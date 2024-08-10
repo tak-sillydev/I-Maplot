@@ -62,16 +62,29 @@ if __name__ == "__main__":
 		with open("config.json", "r", encoding="utf-8") as f:
 			conf = json.load(f)
 
-		areamap: dict = conf["areamap"]
-		shape_path: str     = areamap["shapefile"]
-		areamap_path: str   = areamap["output"]
-		assistant_path: str = conf["paths"]["assistant"]
+		# root
+		makemap: dict		= conf["makemap"]
 
-		simplify_tolerance: int = areamap["simplify_tolerance"]
+		# area map
+		areamap: dict			= makemap["areamap"]
+		areamap_shape_path: str	= areamap["shapefile"]
+		areamap_color_edge: str	= areamap["color"]["edge"]
+		areamap_color_face: str	= areamap["color"]["face"]
+		areamap_color_back: str	= areamap["color"]["back"]
 
-		edge: str = areamap["color"]["edge"]
-		face: str = areamap["color"]["face"]
-		back: str = areamap["color"]["back"]
+		# lake data
+		lake: dict				= makemap["lake"]
+		lake_shape_path: str	= lake["shapefile"]
+		lake_color_edge: str	= lake["color"]["edge"]
+		lake_color_face: str	= lake["color"]["face"]
+		lake_color_back: str	= lake["color"]["back"]
+
+		# output paths
+		paths: dict			= conf["paths"]
+		areamap_path: str   = paths["areamap"]
+		assistant_path: str = paths["assistant"]
+
+		simplify_tolerance: int = makemap["simplify_tolerance"]
 
 		pref: dict   = conf["pref"]
 		region: dict = conf["region"]
@@ -81,23 +94,40 @@ if __name__ == "__main__":
 
 	print("done", flush=True)
 
-	print("Reading Shapefile...", end="", flush=True)
-	gpd_map = gpd.read_file(shape_path, encoding="utf-8")
+	print("Reading Shapefiles...", end="", flush=True)
+	gpd_map  = gpd.read_file(areamap_shape_path, encoding="utf-8")
+	gpd_lake = gpd.read_file(lake_shape_path, encoding="utf-8")
 	print("done", flush=True)
 
 	fig = plt.figure()
 	ax  = fig.add_subplot()
-	ax.set_facecolor(back)
+	ax.set_facecolor(areamap_color_back)
 
 	# データの簡略化
 	print("Simplifying maps...", end="", flush=True)
 	smp_map = gpd_map.copy()
 	smp_map["geometry"] = smp_map["geometry"].simplify(simplify_tolerance)
+	smp_lake = gpd_lake.copy()
+	smp_lake["geometry"] = smp_lake["geometry"].simplify(simplify_tolerance)
 	print("done", flush=True)
 
 	# 細分区域の描画
 	print("Ploting each area...", end="", flush=True)
-	smp_map.plot(ax=ax, edgecolor=edge, facecolor=face, linewidth=0.5)
+	smp_map.plot(ax=ax, edgecolor=areamap_color_edge, facecolor=areamap_color_face, linewidth=0.5)
+	print("done", flush=True)
+
+	# 湖沼の描画（面積上位30番目まで）
+	# 座標系 JGD2000 (EPSG:4612) -> 正積図法 (EPSG:3410)に変換
+	print("Ploting lakes...", end="", flush=True)
+
+	smp_lake.crs = "epsg:4612"
+	eap_lake = smp_lake.to_crs(epsg=3410)	# Equal Area map Projection
+
+	eap_lake["area"] = eap_lake["geometry"].apply(lambda x: x.area)
+	df = eap_lake.sort_values("area", ascending=False).head(30)
+	lk = smp_lake[smp_lake["W09_001"].isin(list(df["W09_001"]))]
+	lk.plot(ax=ax, edgecolor=lake_color_edge, facecolor=lake_color_face, linewidth=0.1)
+
 	print("done", flush=True)
 
 	# 県の枠線描画 (データの簡略化はこの中で行う)
@@ -106,9 +136,9 @@ if __name__ == "__main__":
 		gpd_map,
 		pref,
 		ax=ax,
-		edgecolor=edge,
+		edgecolor=areamap_color_edge,
 		facecolor="None",
-		linewidth=1.5,
+		linewidth=1.0,
 		simplify_tolerance=simplify_tolerance
 	)
 	print("all done", flush=True)

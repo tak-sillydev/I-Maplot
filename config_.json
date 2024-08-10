@@ -18,18 +18,28 @@
 		"やや強い", 
 		"強い"
 	],
-	"areamap": {
-		"shapefile": "./20190125_AreaForecastLocalE_GIS/地震情報／細分区域.shp",
-		"output": "./data/areamap.pkl",
+	"makemap": {
 		"simplify_tolerance": 0.001,
-		"color": {
-			"edge": "silver",
-			"face": "burlywood",
-			"back": "cornflowerblue"
+		"lake": {
+			"shapefile": "./W09-05_GML/W09-05-g_Lake.shp",
+			"color": {
+				"edge": "cornflowerblue",
+				"face": "cornflowerblue",
+				"back": "cornflowerblue"
+			}
+		},
+		"areamap": {
+			"shapefile": "./20190125_AreaForecastLocalE_GIS/地震情報／細分区域.shp",
+			"color": {
+				"edge": "silver",
+				"face": "burlywood",
+				"back": "cornflowerblue"
+			}
 		}
 	},
 	"interval_sec": 30,
 	"paths": {
+		"areamap": "./data/areamap.pkl",
 		"assistant": "./data/assistant.pkl",
 		"feedctl": "./data/feedctl.pkl",
 		"images": "./images",

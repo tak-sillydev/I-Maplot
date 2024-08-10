@@ -50,8 +50,8 @@ class EQPlotter:
 		self.assistant_path_: str = config["paths"]["assistant"]
 		self.images_path_: str    = config["paths"]["images"]
 		self.output_path_: str    = config["paths"]["output"]
-		self.areamap_path_: str   = config["areamap"]["output"]
-		self.backcolor: str = config["areamap"]["color"]["back"]
+		self.areamap_path_: str   = config["paths"]["areamap"]
+		self.backcolor: str = config["makemap"]["areamap"]["color"]["back"]
 		self.ns_: dict      = config["xmlfeed"]["xml_ns"]["report"]
 
 	def ParseXML(self, xml: str):
