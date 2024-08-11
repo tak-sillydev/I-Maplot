@@ -174,6 +174,15 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 
 	except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
 		OnRequestException(feedctl, config, e)
+
+	except xml.etree.ElementTree.ParseError:
+		tmstr = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+		fname = config["paths"]["log"]["dir"] + "/" + tmstr + "_err.txt"
+		logger.error(traceback.format_exc() + "\n\nXML saved as : " + fname)
+
+		with open(fname, "w", encoding=response.encoding) as f:
+			f.write(response.text)
+			
 	except Exception:
 		# これの呼び出し元（Scheduler.caller_）でも例外は補足しているのでなくても良い
 		logger.error(traceback.format_exc())
