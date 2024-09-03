@@ -8,44 +8,41 @@ import pickle
 import time
 import os
 import traceback
+import dataclasses
 
 from logging import INFO, DEBUG, WARNING, ERROR, CRITICAL
 from gc import collect
-from xml.etree import ElementTree
+from xml.etree import ElementTree as ET
 from xml.etree.ElementTree import Element
 from finalizer import Finalizer
 from socket import socket, setdefaulttimeout, AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
+from collections.abc import Iterator
+from typing import Tuple
 
 from interval import Scheduler
 from feedctl import FeedControl
-from report import EQPlotter
+from report import EQPlotter_VXSE51, EQPlotter_VXSE53
 import log
 import debugdef
 
 ### class EntryData BEGIN ###
 
+@dataclasses.dataclass
 class EntryData:
 	"""
 		気象庁から取得した XML フィード（目次にあたる）の各項目の情報をオブジェクトにして保存する。
 		地震情報の判断、解析の入口として使用する。
 	"""
-	def __init__(self, title: str = "", link: str = "", content: str = "",
-			  		id: str = "", updated_time: datetime.datetime = None) -> None:
-		self.SetEntry(title, link, content, id, updated_time)
-		pass
-
-	def SetEntry(self, title: str = "", link: str = "", content: str = "",
-			  		id: str = "", updated_time: datetime.datetime = None) -> None:
-		self.updated_time: str	= updated_time
-		self.title: str		= title
-		self.link: str		= link
-		self.content: str	= content
-		self.id: str		= id
+	updated_time: datetime.datetime
+	title: str
+	link: str
+	content: str
+	id: str
 
 ### class EntryData END ###
 
 
-def GetEntryList(root: Element, ns: dict) -> list:
+def GetEntryList(root: Element, ns: dict) -> list[EntryData]:
 	"""
 		XML フィードから各項目情報を取得し、リストにまとめて返す。
 		root: XML 全体を示すオブジェクト
@@ -55,14 +52,15 @@ def GetEntryList(root: Element, ns: dict) -> list:
 	node = root.findall("atom:entry", ns)
 
 	for n in node:
-		title = n.find("atom:title", ns).text
-		link = n.find("atom:link", ns).get("href")
-		content = n.find("atom:content", ns).text
-		id = n.find("atom:id", ns).text
-		updated = n.find("atom:updated", ns)
-		dt = datetime.datetime.fromisoformat(updated.text)
+		title	= n.find("atom:title", ns).text
+		link	= n.find("atom:link", ns).get("href")
+		content	= n.find("atom:content", ns).text
+		id		= n.find("atom:id", ns).text
 
-		lsentry.append(EntryData(title, link, content, id, dt))
+		updated	= n.find("atom:updated", ns)
+		dt		= datetime.datetime.fromisoformat(updated.text)
+
+		lsentry.append(EntryData(dt, title, link, content, id))
 
 	return lsentry
 
@@ -95,6 +93,25 @@ def OnRequestException(feedctl: FeedControl, config: dict, e: Exception) -> None
 	if feedctl.reqerr_count % config["xmlfeed"]["request"]["error_count"] == 0:
 		logger.error(f"地震情報の取得に{feedctl.reqerr_count}回連続で失敗しました。ログを確認してください。")
 
+type EQPlotterSeries = EQPlotter_VXSE51 | EQPlotter_VXSE53
+type ValidEntry = Tuple[str, EntryData, EQPlotterSeries]
+
+def ValidEntryGenerator(feedctl: FeedControl, entry_list: list[EntryData], config: dict) -> Iterator[ValidEntry]:
+	lsentry = sorted(entry_list, key=lambda x: x.updated_time)
+	last_time: datetime.datetime = None
+
+	for l in lsentry:
+		if l.updated_time < feedctl.last_eq: continue
+
+		if   "VXSE51" in l.id:	# 震度速報
+			last_time = l.updated_time
+			yield ("震度速報", l, EQPlotter_VXSE51(config))
+		elif "VXSE53" in l.id:	# 震源・震度に関する情報
+			last_time = l.updated_time
+			yield ("地震情報", l, EQPlotter_VXSE53(config))
+
+	if last_time is not None: feedctl.last_eq = last_time
+
 def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 	"""
 		気象庁 XML フィードから地震火山情報を取得し、地震に関する情報を抜き出す。
@@ -117,7 +134,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 		if response.status_code == 200:
 			feedctl.reqerr_count = 0
 			response.encoding = response.apparent_encoding
-			xml = ElementTree.fromstring(response.text)
+			xml = ET.fromstring(response.text)
 
 			# XML フィードの最終更新時刻を更新する
 			# 時刻情報は JST で記載されているので UTC（GMT）に変換する。
@@ -128,43 +145,31 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 			if CheckId(xml, feedctl, ns) is not True:
 				# 「震度に関する情報」と「震源・震度に関する情報」を抜き出す
 				# 「震源に関する情報」は、直後に震度と一緒に情報が再送されるため無視する
-				lsentry = GetEntryList(xml, ns)
-				lsentry = sorted(
-					[l for l in lsentry if "震度" in l.title and l.updated_time > feedctl.last_eq],
-					key=lambda x: x.updated_time
-				)
-				if len(lsentry) > 0:
-					feedctl.last_eq = max(lsentry, key=lambda x: x.updated_time).updated_time
+				for name, entry, plotter in ValidEntryGenerator(feedctl, GetEntryList(xml, ns), config):
+					response = requests.get(entry.link)
+					response.encoding = response.apparent_encoding
+					response.raise_for_status()
 
-					for l in lsentry:
-						response = requests.get(l.link)
-						response.encoding = response.apparent_encoding
-						response.raise_for_status()
+					plotter.ParseXML(response.text)
 
-						eqp = EQPlotter(config)
-						eqp.ParseXML(response.text)
-
-						level = eqp.eqi_.intensity_area.eqlevel
-						imgpath = eqp.DrawMap("3" if level >= 3 else "1")
-						message = eqp.GetMessage()
-						
-						# 更新（発表）時刻は UTC なので JST(+9h) に直す
-						updated_tmz = l.updated_time.astimezone(datetime.timezone(datetime.timedelta(hours=9)))
-						post_fmt = "【" +\
-							("震度速報" if "震度速報" in l.title else "震源・震度情報") +\
-							updated_tmz.strftime(" %Y-%m-%d %H:%M ") + "気象庁発表】{}"
-						
-						# ログに地震情報を記録、同時に X へポスト
-						feedctl.last_msg = post_fmt.format(message)
-						logger.info("地震情報：\n" + post_fmt.format(message))
-						message = post.Adjust_PostLen(post_fmt, message)
-						post.Post(config["postauth"], message, imgpath)
-						# del しておくとメモリの消費を防げる（1 回の描画に 100 MB 近く使っちゃうので……）
-						del eqp
+					imgpath = plotter.DrawMap("3" if config["eqlevel"][plotter.max_int] >= 3 else "1")
+					message = plotter.GetMessage()
 					
+					# 更新（発表）時刻は UTC なので JST(+9h) に直す
+					updated_tmz = entry.updated_time.astimezone(datetime.timezone(datetime.timedelta(hours=9)))
+					post_fmt = "【" + name + updated_tmz.strftime(" %Y-%m-%d %H:%M ") + "気象庁発表】{}"
+					
+					# ログに地震情報を記録、同時に X へポスト
+					feedctl.last_msg = post_fmt.format(message)
+					logger.info("地震情報：\n" + post_fmt.format(message))
+					message = post.Adjust_PostLen(post_fmt, message)
+					post.Post(config["postauth"], message, imgpath)
+					# del しておくとメモリの消費を防げる（1 回の描画に 100 MB 近く使っちゃうので……）
 					# ガベージコレクションを強制実行することでさらにメモリ消費を抑える作戦
+					del plotter
 					collect()
-					return
+				
+				return
 		# 更新情報なし / XML ID に変更なし / 地震情報エントリに更新なし の場合はここにくる
 		logger.debug("地震情報：新しい地震の情報はありません")
 

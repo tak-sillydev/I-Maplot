@@ -2,26 +2,27 @@
 from shapely.geometry import Polygon, MultiPolygon, Point
 from pandas import DataFrame
 
+from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import pickle
 import json
 
-def SelectLargestPolygon(geometry):
+def SelectLargestPolygon(geometry: Polygon | MultiPolygon):
 	polygon = list(geometry)[0]
 
-	if isinstance(polygon, Polygon):
-		target = polygon
-	elif isinstance(polygon, MultiPolygon):
-		areas = [(p.area, p) for p in polygon.geoms]
-		areas = sorted(areas, key=lambda x: x[0], reverse=True)
-		target = areas[0][1]
-	else:
-		target = Polygon()
+	match polygon:
+		case Polygon():
+			target = polygon
+		case MultiPolygon():
+			areas = [(p.area, p) for p in polygon.geoms]
+			areas = sorted(areas, key=lambda x: x[0], reverse=True)
+			target = areas[0][1]
+		case _:
+			target = Polygon()
 	return target
 
-def DrawPrefecture(df: gpd.GeoDataFrame, preflist: list, ax=None, 
-				   edgecolor="None", facecolor="None", linewidth=0, simplify_tolerance=0.001):
+def DrawPrefecture(df: gpd.GeoDataFrame, preflist: list, ax: Axes=None, edgecolor="None", facecolor="None", linewidth=0):
 	if ax is None: ax = plt.gca()
 
 	for pl in preflist:
@@ -30,17 +31,18 @@ def DrawPrefecture(df: gpd.GeoDataFrame, preflist: list, ax=None,
 
 		if len(m) > 0:
 			print(f"  Framing {pl["name"]}, {(m.iloc[0])["name"]} - {(m.iloc[-1])["name"]} ...", end="", flush=True)
+
 			bound = m.dissolve()
-			bound["geometry"] = SelectLargestPolygon(bound["geometry"]).simplify(simplify_tolerance)
+			bound["geometry"] = SelectLargestPolygon(bound["geometry"])
 			bound.plot(ax=ax, edgecolor=edgecolor, facecolor=facecolor, linewidth=linewidth)
 			print("done", flush=True)
 	return
 
-def Centroid2Point(geometry) -> Point:
+def Centroid2Point(geometry: DataFrame) -> Point:
 	ctr = list(geometry.centroid.coords)[0]
 	return Point(ctr)
 
-def Bound2String(geometry) -> str:
+def Bound2String(geometry: DataFrame) -> str:
 	bounds = geometry.bounds
 	return "{},{},{},{}".format(bounds[0], bounds[1], bounds[2], bounds[3])
 
@@ -103,32 +105,29 @@ if __name__ == "__main__":
 	ax  = fig.add_subplot()
 	ax.set_facecolor(areamap_color_back)
 
-	# データの簡略化
-	print("Simplifying maps...", end="", flush=True)
-	smp_map = gpd_map.copy()
-	smp_map["geometry"] = smp_map["geometry"].simplify(simplify_tolerance)
-	smp_lake = gpd_lake.copy()
-	smp_lake["geometry"] = smp_lake["geometry"].simplify(simplify_tolerance)
-	print("done", flush=True)
 
 	# 細分区域の描画
 	print("Ploting each area...", end="", flush=True)
-	smp_map.plot(ax=ax, edgecolor=areamap_color_edge, facecolor=areamap_color_face, linewidth=0.5)
+	gpd_map.plot(ax=ax, edgecolor=areamap_color_edge, facecolor=areamap_color_face, linewidth=0.5)
 	print("done", flush=True)
+
 
 	# 湖沼の描画（面積上位30番目まで）
 	# 座標系 JGD2000 (EPSG:4612) -> 正積図法 (EPSG:3410)に変換
 	print("Ploting lakes...", end="", flush=True)
 
-	smp_lake.crs = "epsg:4612"
-	eap_lake = smp_lake.to_crs(epsg=3410)	# Equal Area map Projection
+	gpd_lake.crs = "epsg:4612"
+	eap_lake = gpd_lake.to_crs(epsg=3410)	# Equal Area map Projection
 
+	# ジオメトリから面積を抽出し、面積の大きい順にソートし上位30位までを取得
 	eap_lake["area"] = eap_lake["geometry"].apply(lambda x: x.area)
 	df = eap_lake.sort_values("area", ascending=False).head(30)
-	lk = smp_lake[smp_lake["W09_001"].isin(list(df["W09_001"]))]
-	lk.plot(ax=ax, edgecolor=lake_color_edge, facecolor=lake_color_face, linewidth=0.1)
 
+	# 正積図法で絞り込んだデータを元の座標系のデータにも適用し、さらに簡略化してプロット
+	gpd_lake = gpd_lake[gpd_lake["W09_001"].isin(list(df["W09_001"]))].simplify(0.005)
+	gpd_lake.plot(ax=ax, edgecolor=lake_color_edge, facecolor=lake_color_face, linewidth=0.1)
 	print("done", flush=True)
+
 
 	# 県の枠線描画 (データの簡略化はこの中で行う)
 	print("Framing Prefectures...", flush=True)
@@ -139,7 +138,6 @@ if __name__ == "__main__":
 		edgecolor=areamap_color_edge,
 		facecolor="None",
 		linewidth=1.0,
-		simplify_tolerance=simplify_tolerance
 	)
 	print("all done", flush=True)
 

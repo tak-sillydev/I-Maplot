@@ -6,24 +6,24 @@ import cv2
 import numpy as np
 import json
 
-import matplotlib
-matplotlib.use("Agg")
-
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
+plt.switch_backend("Agg")
 
-from xml.etree import ElementTree
+from xml.etree import ElementTree as ET
 from decimal import Decimal
 from collections import Counter
-from pandas import read_pickle
+from pandas import read_pickle, DataFrame
 
-from eqinfo import EQInfo
-
+from eqinfo import IntensityHolder, HypocenterHolder
 
 ### class EQPlotter BEGIN ###
 
-class EQPlotter:
+class EQPlotterBase:
 	"""
-		震度地図を描画する。
+		震度地図の描画機能のみを提供する。
+		XMLの解析等はサブクラスにて担当し、このクラスではすでに整理された情報のみを受け取る。
 		I-Maplot の根幹を担う部分
 	"""
 	def __init__(self, config: dict) -> None:
@@ -31,313 +31,405 @@ class EQPlotter:
 			コンストラクタ
 			config: config.json に規定された設定情報。LoadConfig 関数にわたす
 		"""
-		self.eqi_: EQInfo = EQInfo(config)
-		self.fhypocenter_: bool = False
-		self.assistant_ = None
-		self.fig_ = None
-		self.ax_ = None
-		self.img_base_ = None
-
+		# 設定情報の読み込み
 		self.LoadConfig(config)
-		self._LoadAssistantData()
-		self._PrepareFigure()
+
+		self.__img_base: cv2.typing.MatLike  = None
+		self.__raster_img_path: str = ""
+		self.__bound: list = [0xffff, 0xffff, -0xffff, -0xffff]
+
+		# 地図データ（Created by makemap.py）の読み込み
+		with open(config["paths"]["areamap"], "rb") as f:
+			self.__fig: Figure = pickle.load(f)
+		
+		self.__ax: Axes = self.__fig.gca()
+		self.__ax.axis("tight")				# よくわからん
+		self.__ax.axis("off")				# 軸の表示を行わない
+		self.__ax.set_aspect("equal")		# 縦横軸の比率が等しくなるように
+		self.__fig.set_size_inches(16, 9)	# キャンバス比率を 16:9 に
+
+		# 地図描画補助情報の読み込み
+		self.assistant: DataFrame = read_pickle(config["paths"]["assistant"])
 
 	def LoadConfig(self, config: dict) -> None:
 		"""
 			設定情報をメンバ変数に設定する。
 			config: config.json に規定された設定情報
 		"""
-		self.assistant_path_: str = config["paths"]["assistant"]
-		self.images_path_: str    = config["paths"]["images"]
-		self.output_path_: str    = config["paths"]["output"]
-		self.areamap_path_: str   = config["paths"]["areamap"]
+		self.__output_path: str    = config["paths"]["output"]
+		self.images_path: str    = config["paths"]["images"]
 		self.backcolor: str = config["makemap"]["areamap"]["color"]["back"]
-		self.ns_: dict      = config["xmlfeed"]["xml_ns"]["report"]
+		self.ns: dict      = config["xmlfeed"]["xml_ns"]["report"]
 
-	def ParseXML(self, xml: str):
-		"""
-			地震に関する情報（XML 電文）を解析してメンバ変数に格納する。
-			xml: XML 電文の文字列
-		"""
-		ns_report = self.ns_["report"]
-		ns_head = self.ns_["head"]
-		ns_body = self.ns_["body"]
+	def XMLSplitRoot(self, xml: str) -> tuple[ET.Element | None, ET.Element | None, ET.Element | None]:
+		root = ET.fromstring(xml)
+		ctrl = root.find("atom:Control", self.ns["report"])
+		head = root.find("atom:Head", self.ns["head"])
+		body = root.find("atom:Body", self.ns["body"])
+		return (ctrl, head, body)
 
-		# 電文は Control, Head, Body 部からなる
-		root = ElementTree.fromstring(xml)
-		Ctrl = root.find("atom:Control", ns_report)
-		Head = root.find("atom:Head", ns_head)
-		Body = root.find("atom:Body", ns_body)
+	def Rasterize(self) -> str:
+		if self.__img_base is not None:	return
 
-		# 「震度速報」／「震源・震度に関する情報」を判別する
-		Title = Ctrl.find("atom:Title", ns_report)
-		self.fhypocenter_ = True if "震源" in Title.text else False
-
-		OriginTime = Body.find(".//atom:OriginTime", ns_body)
-
-		# （推定）地震発生時刻の取り出し
-		if OriginTime is None:
-			TargetTime = Head.find(".//atom:TargetDateTime", ns_head)
-			self.eqi_.origin_dt = datetime.datetime.fromisoformat(TargetTime.text)
-		else:
-			self.eqi_.origin_dt = datetime.datetime.fromisoformat(OriginTime.text)
-
-		# 固定付加文の取得。文はパターン化されておりコードで識別することができる
-		ForecastComment = Body.findall(".//atom:ForecastComment[@codeType='固定付加文']", ns_body)
-		for c in ForecastComment:
-			Code = c.find(".//atom:Code", ns_body)
-			if Code is not None:
-				self.eqi_.code = Code.text.split()
+		# 16 : 9 に合わせて領域の切り取りが必要
+		self.__bound[0] -= 0.5
+		self.__bound[1] -= 0.5
+		self.__bound[2] += 0.5
+		self.__bound[3] += 0.5
+		xdiff = self.__bound[2] - self.__bound[0]
+		ydiff = self.__bound[3] - self.__bound[1]
 		
-		# 震源情報がある場合、その座標や深さ、マグニチュードを取得する
-		if self.fhypocenter_:
-			Coordinate = Body.find(".//jmx_eb:Coordinate", ns_body)
-			Hypocenter = Body.find(".//atom:Hypocenter/atom:Area/atom:Name", ns_body)
-			self.eqi_.ParseHypocenter(Coordinate.text)
-			self.eqi_.hypocenter = Hypocenter.text
-
-			try:
-				Magnitude = Body.find(".//jmx_eb:Magnitude", ns_body)
-				self.eqi_.magnitude = float(Magnitude.text)
-			except:
-				self.eqi_.magnitude = None
-
-		try:
-			Intensity = Body.find(".//atom:Intensity/atom:Observation", ns_body)
-			CodeType = Intensity.findall(".//atom:CodeDefine/atom:Type", ns_body)
-		except:
-			CodeType = []
-
-		# 震度情報を１つずつ解析してクラスに格納していく
-		for n in CodeType:
-			xpath = n.attrib['xpath']
-			path_split = xpath.split('/')
-			path_split.pop()
-			split_new = ["atom:" + x for x in path_split]
-			newpath = "/".join(split_new)
-
-			Area = Intensity.findall(newpath, ns_body)
-			lsint = []
-
-			for a in Area:
-				name = a.find("atom:Name", ns_body)
-				maxint = a.find("atom:MaxInt", ns_body)
-				if maxint is not None:
-					lsint.append((name.text, maxint.text))
-			
-			if   "都道府県" in n.text:
-				self.eqi_.intensity_pref.AddIntensity(lsint)
-			elif "細分区域" in n.text:
-				self.eqi_.intensity_area.AddIntensity(lsint)
-			elif   "市町村" in n.text:
-				self.eqi_.intensity_city.AddIntensity(lsint)
-
-	def _PrepareFigure(self) -> None:
-		""" ベース地図を読み込む """
-		with open(self.areamap_path_, "rb") as f:
-			self.fig_ = pickle.load(f)
-			self.ax_ = self.fig_.gca()
-
-		self.fig_.set_size_inches(16, 9)
-
-	def _LoadAssistantData(self) -> None:
-		""" 補助情報（区域の重心、上下左右端座標等）を読み込む """
-		self.assistant_ = read_pickle(self.assistant_path_)
-
-	def GetMessage(self) -> str:
-		"""
-			メンバ変数に格納された情報から地震情報文を作成する。
-		"""
-		dt  = self.eqi_.origin_dt
-		fdt = True if dt.hour < 12 else False
-		rets = ""
-
-		if self.fhypocenter_:
-			# 震源・震度に関する情報
-			rets += f"\n午{"前" if fdt else "後"}{dt.hour if fdt else dt.hour - 12}時{dt.minute}分ごろ地震がありました"
-
-			if "0215" in self.eqi_.code:
-				rets += f"\nこの地震による津波の心配はありません"
-			
-			rets += f"\n震源は{self.eqi_.hypocenter}"
-			rets += f"\n深さ{self.eqi_.PrintDepth()}　マグニチュード{self.eqi_.magnitude or "不明"}"
-			rets += self.eqi_.intensity_city.PrintIntensity()
+		if ydiff > xdiff * 0.5625:
+			# Y の大きさが 16:9 より大きいので、Y を基準に X を 16 に合うように拡張
+			xdiff = ydiff * 1.7778 - xdiff
+			self.__bound[0] -= xdiff / 2
+			self.__bound[2] += xdiff / 2
 		else:
-			# 震度速報
-			rets += f"\n午{"前" if fdt else "後"}{dt.hour if fdt else dt.hour - 12}時{dt.minute}分ごろ"
-			rets += f"\n{self.PrintRegion()}{self.eqi_.intensity_pref.PrintEQLevel()}地震がありました"
-			
-			if self.eqi_.intensity_pref.eqlevel > 1:
-				rets += f"\n揺れが強かった沿岸部では念のため津波に注意してください"
-			
-			rets += self.eqi_.intensity_area.PrintIntensity()
-		return rets
+			# Y の大きさが 16:9 より小さいので、X を基準に Y を 9 に合うように拡張
+			ydiff = xdiff * 0.5625 - ydiff
+			self.__bound[1] -= ydiff / 2
+			self.__bound[3] += ydiff / 2
 
-	def PrintRegion(self) -> str:
+		self.__ax.set_xlim(self.__bound[0], self.__bound[2])
+		self.__ax.set_ylim(self.__bound[1], self.__bound[3])
+
+		self.__raster_img_path = "./temporary.png"
+		self.__fig.savefig(
+			self.__raster_img_path,
+			facecolor=self.backcolor,
+			bbox_inches="tight",
+			pad_inches=0,
+			dpi=300
+		)
+		self.__img_base = cv2.imread(self.__raster_img_path)
+		plt.close(self.__fig)
+
+		return self.__raster_img_path
+
+	# x, y は画像としての座標 (px)
+	def PlotImage(self, px: list, img_add: cv2.typing.MatLike) -> None:
 		"""
-			（震度速報時に）地震のあった地方名を出力する。
+			ベース地図に png 画像を重ね合わせる。
+			px: 座標 (x, y) のリスト。同じ画像をまとめて描画可能
+			img_add: 地図に重ねる画像 
 		"""
-		intensity = self.eqi_.intensity_area
-		max_area = intensity.intensity[intensity.intensity_max]
+		if (self.__img_base is None) or (img_add is None): return
 
-		df = self.assistant_[self.assistant_["name"].isin(max_area)]
-		c = Counter(df["region"].iloc)
-		region = c.most_common()[0][0]
-
-		return region + ("で" if len(region) > 0 else "")
-
-	def DrawMap(self, bound_level: str="1") -> str:
+		bseh, bsew = self.__img_base.shape[:2]
+		addh, addw = img_add.shape[:2]
+		
+		px = [(x, y) for x, y in px \
+				if not(x + addw < 0 or y + addh < 0 or x > bsew or y > bseh)]
+		for x, y in px:
+			alpha_blend(self.__img_base, img_add, x, y)
+	
+	def OutputImage(self, eq_time: datetime.datetime) -> str:
+		""" 画像をファイルに出力する """
+		outpath = os.path.join(self.__output_path, f"{eq_time.strftime("%Y%m%d_%H%M%S")}.png")
+		cv2.imwrite(outpath, self.__img_base)
+		os.remove(self.__raster_img_path)
+		return outpath
+	
+	# max_bound: [min_x, min_y, max_x, max_y]
+	def ExpandMapBound(self, min_x: float, min_y: float, max_x: float, max_y: float) -> list:
 		"""
-			震度地図を描画する。
-			bound_level: 描画に際して必ず含める震度
+			地図の描画矩形と座標を比較し、矩形が拡大するように更新する。
+			min_x: 左
+			min_y: 上
+			max_x: 右
+			max_y: 下
 		"""
-		self.ax_.axis("tight")
-		self.ax_.axis("off")
-		self.ax_.set_aspect("equal")
+		self.__bound[0] = min(min_x, self.__bound[0])	# min_x
+		self.__bound[1] = min(min_y, self.__bound[1])	# min_y
+		self.__bound[2] = max(max_x, self.__bound[2])	# max_x
+		self.__bound[3] = max(max_y, self.__bound[3])	# max_y
+		return self.__bound
 
-		# [min_x, min_y, max_x, max_y]
-		max_bound = [0xffff, 0xffff, -0xffff, -0xffff]
+	def GeoCoord2Pixel(self, lon: float, lat: float) -> tuple:
+		"""
+			地図データ上の緯度経度をラスタ画像上のピクセル座標に変換する。lon, lat を x, y のタプルにして返す。
+			lon: 経度
+			lat: 緯度
+		"""
+		if self.__img_base is None: return (0, 0)
 
-		if self.fhypocenter_:
-			max_bound = ExpandBound(max_bound, self.eqi_.longitude, self.eqi_.latitude, self.eqi_.longitude, self.eqi_.latitude)
+		lpx, lpy = GetLatLonperPixel(self.__bound, self.__img_base)
+		x = int(Decimal(str((lon - self.__bound[0]) / lpx)).quantize(Decimal("0")))
+		y = int(Decimal(str((self.__bound[3] - lat) / lpy)).quantize(Decimal("0")))
 
-		self.eqi_.intensity_area.bound_level = bound_level
+		return (x, y)
+
+### class EQPlotterBase END ###
+
+### class Hypocenter_Plotter BEGIN ###
+
+class Hypocenter_Plotter(EQPlotterBase):
+	"""
+		震源の描画機能を提供するクラス。
+	"""
+	def __init__(self, config: dict) -> None:
+		super().__init__(config)
+		self.hypocenter = HypocenterHolder(config)
+
+	def SetMapBounds(self):
+		""" 地図の描画範囲を決定する。 """
+		lon = self.hypocenter.longitude
+		lat = self.hypocenter.latitude
+		self.ExpandMapBound(lon, lat, lon, lat)
+	
+	# x, y は地図としての座標 (lon, lat)
+	def PlotHypocenter(self, zoom: float=1.0) -> None:
+		"""
+			ベース地図に震源画像を描画する。
+			zoom: 画像を重ね合わせる際の倍率
+		"""
+		# Matplotlib 形式の地図を画像化してから画像を載せる
+		self.Rasterize()
+		
+		img_add = cv2.imread(os.path.join(self.images_path, "hypocenter.png"), cv2.IMREAD_UNCHANGED)
+		img_add = cv2.resize(img_add, dsize=None, fx=zoom, fy=zoom, interpolation=cv2.INTER_LINEAR)
+		longitude = self.hypocenter.longitude
+		latitude  = self.hypocenter.latitude
+		
+		if not(longitude is None or latitude is None):
+			x, y = self.GeoCoord2Pixel(longitude, latitude)
+			cx, cy = GetCenterPixel(img_add)
+			self.PlotImage([(x - cx, y - cy)], img_add)
+
+### class Hypocenter_Plotter END ###
+
+### class Intensity_Plotter BEGIN ###
+
+class Intensity_Plotter(EQPlotterBase):
+	"""
+		震度の描画機能を提供するクラス。
+	"""
+	def __init__(self, config: dict) -> None:
+		super().__init__(config)
+		self.intensity = IntensityHolder(config)
+
+	def SetMapBounds(self, plot_level: str):
+		""" 地図の描画範囲を決定する。 """
 		fbound = True
-
-		for k, v in self.eqi_.intensity_area.intensity.items():
+		for k, v in self.intensity.intensity.items():
 			if len(v) == 0: continue
 
-			m = self.assistant_[self.assistant_["name"].isin(v)]
+			m = self.assistant[self.assistant["name"].isin(v)]
 
 			# m["bounds"] 各行は csv 形式のテキスト
 			# csv2tuple で tuple に変換して list にして格納
 			# tuple -> (min_x, min_y, max_x, max_y)
 			if fbound:
 				bounds = np.array(list(map(lambda b: csv2tuple(b), m["bounds"]))).T
-				max_bound = ExpandBound(max_bound, bounds[0].min(), bounds[1].min(), bounds[2].max(), bounds[3].max())
+				self.bound = self.ExpandMapBound(bounds[0].min(), bounds[1].min(), bounds[2].max(), bounds[3].max())
 			
-			if k == self.eqi_.intensity_area.bound_level: fbound = False
+			if k == plot_level: fbound = False
 
-		# 16 : 9 に合わせて領域の切り取りが必要
-		max_bound[0] -= 0.5
-		max_bound[1] -= 0.5
-		max_bound[2] += 0.5
-		max_bound[3] += 0.5
-		xdiff = max_bound[2] - max_bound[0]
-		ydiff = max_bound[3] - max_bound[1]
-		
-		if ydiff > xdiff * 0.5625:
-			# Y の大きさが 16:9 より大きいので、Y を基準に X を 16 に合うように拡張
-			xdiff = ydiff * 1.7778 - xdiff
-			max_bound[0] -= xdiff / 2
-			max_bound[2] += xdiff / 2
-		else:
-			# Y の大きさが 16:9 より小さいので、X を基準に Y を 9 に合うように拡張
-			ydiff = xdiff * 0.5625 - ydiff
-			max_bound[1] -= ydiff / 2
-			max_bound[3] += ydiff / 2
+	def PlotIntensity(self):
+		""" IntensityHolder から震度情報を取り出して描画する。 """
+		self.Rasterize()
 
-		self.ax_.set_xlim(max_bound[0], max_bound[2])
-		self.ax_.set_ylim(max_bound[1], max_bound[3])
-
-		# 一度地図を画像として出力し、震源と震度を乗せる
-		tmppath = f"./{self.eqi_.origin_dt.strftime("%Y%m%d_%H%M%S")}_tmp.png"
-		self.fig_.savefig(
-			tmppath,
-			facecolor=self.backcolor,
-			bbox_inches="tight",
-			pad_inches=0,
-			dpi=300
-		)
-		self.img_base_ = cv2.imread(tmppath)
-		plt.close(self.fig_)
-
-		# 震源の描画
-		self.PlotHypocenter(self.eqi_.longitude, self.eqi_.latitude, tuple(max_bound), 0.45)
-		# 震度の描画
-		for k, v in self.eqi_.intensity_area.intensity.items():
+		for k, v in self.intensity.intensity.items():
 			if len(v) == 0: continue
 
-			m = self.assistant_[self.assistant_["name"].isin(v)]
+			m = self.assistant[self.assistant["name"].isin(v)]
 			coords = list(map(lambda g: (g.x, g.y), m["centroid"]))
-			self.PlotIntensity(coords, tuple(max_bound), k, 0.25)
-
-		outpath = os.path.join(self.output_path_, f"{self.eqi_.origin_dt.strftime("%Y%m%d_%H%M%S")}.png")
-		cv2.imwrite(outpath, self.img_base_)
-		os.remove(tmppath)
-		return outpath
-
-	# x, y は画像としての座標 (px)
-	def PlotImage(self, px: list, img_add) -> None:
-		"""
-			ベース地図に png 画像を重ね合わせる。
-			px: 座標 (x, y) のリスト。同じ画像をまとめて描画可能
-			img_add: 地図に重ねる画像 
-		"""
-		if (self.img_base_ is None) or (img_add is None): return
-
-		bseh, bsew = self.img_base_.shape[:2]
-		addh, addw = img_add.shape[:2]
+			self.PlotIntensity2(coords, k, 0.25)
 		
-		px = [(x, y) for x, y in px \
-				if not(x + addw < 0 or y + addh < 0 or x > bsew or y > bseh)]
-		for x, y in px:
-			alpha_blend(self.img_base_, img_add, x, y)
-
 	# x, y は地図としての座標 (lon, lat)
-	def PlotHypocenter(self, lon, lat, bound: tuple, zoom=1.0) -> None:
+	def PlotIntensity2(self, coords: list[tuple[float, float]], intensity: str, zoom: float=1.0) -> None:
 		"""
-			ベース地図に震源画像を描画する。
-			lon: 経度
-			lat: 緯度
-			bound: 地図における上下左右端の緯度経度
-			zoom: 画像を重ね合わせる際の倍率
-		"""
-		img_add = cv2.imread(os.path.join(self.images_path_, "hypocenter.png"), cv2.IMREAD_UNCHANGED)
-		img_add = cv2.resize(img_add, dsize=None, fx=zoom, fy=zoom, interpolation=cv2.INTER_LINEAR)
-		
-		if not(lon is None or lat is None):
-			x, y = self.GeoCoord2Pixel(bound, lon, lat)
-			cx, cy = GetCenterPixel(img_add)
-			self.PlotImage([(x - cx, y - cy)], img_add)
-
-	# x, y は地図としての座標 (lon, lat)
-	def PlotIntensity(self, coords: list, bound: tuple, intensity: str, zoom=1.0) -> None:
-		"""
-			ベース地図に震度画像を描画する。
+			ベース地図に指定した震度の震度画像を描画する。
 			coords: 緯度経度のリスト
-			bound: 地図における上下左右端の緯度経度
 			intensity: 描画する震度
 			zoom: 画像を重ね合わせる際の倍率
 		"""
-		img_add = cv2.imread(os.path.join(self.images_path_, intensity+".png"), cv2.IMREAD_UNCHANGED)
+		img_add = cv2.imread(os.path.join(self.images_path, intensity+".png"), cv2.IMREAD_UNCHANGED)
 		img_add = cv2.resize(img_add, dsize=None, fx=zoom, fy=zoom, interpolation=cv2.INTER_LINEAR)
 
-		px = [self.GeoCoord2Pixel(bound, lon, lat) for lon, lat in coords]
+		# 緯度経度のリストをピクセル座標のリストに変換する
+		px = [self.GeoCoord2Pixel(lon, lat) for lon, lat in coords]
 		cx, cy = GetCenterPixel(img_add)
 		self.PlotImage([(x - cx, y - cy) for x, y in px], img_add)
+		return
+
+### class Intensity_Plotter END ###
+
+### class EQPlotter_VXSE51 BEGIN ###
+
+class EQPlotter_VXSE51(Intensity_Plotter):
+	""" VXSE51（震度速報）用の電文解析・地図描画クラス """
+	def __init__(self, config) -> None:
+		super().__init__(config)
+		self.eq_time: datetime.datetime = None
+		self.max_int: str = "-"
+		self.streqlv: str = config["level_str"]
+		self.eqlevel: dict = config["eqlevel"]
 	
-	def GeoCoord2Pixel(self, bound: tuple, lon: float, lat: float) -> tuple:
+	def PrintRegion(self) -> str:
+		""" 地震のあった地方名を出力する。 """
+		max_area: list = self.intensity.intensity[self.max_int]
+
+		df = self.assistant[self.assistant["name"].isin(max_area)]
+		c = Counter(df["region"].iloc)
+		region = c.most_common()[0][0]
+
+		return region + ("で" if len(region) > 0 else "")
+	
+	def GetMessage(self) -> str:
+		""" 震度速報文の出力 """
+		dt   = self.eq_time
+		fdt	 = True if dt.hour < 12 else False
+		rets = ""
+
+		rets += f"\n午{"前" if fdt else "後"}{dt.hour if fdt else dt.hour - 12}時{dt.minute}分ごろ"
+		rets += f"\n{self.PrintRegion()}{self.streqlv[self.eqlevel[self.max_int]]}地震がありました"
+		
+		if self.eqlevel[self.max_int] > 1:
+			rets += f"\n揺れが強かった沿岸部では念のため津波に注意してください"
+		
+		rets += self.intensity.PrintIntensity()
+		return rets
+	
+	def ParseXML(self, xml: str) -> None:
+		""" XML (VXSE51) の解析を行う """
+		# xml_ の接頭辞がついている変数は XML の要素を扱うものであるとみなす
+		xml_ctrl, xml_head, xml_body = self.XMLSplitRoot(xml)
+
+		# XMLが正常にパースできない場合は終了
+		if xml_ctrl is None or xml_head is None or xml_body is None:
+			return
+
+		# InfoKind が「震度速報」でない場合は終了
+		xml_infokind = xml_head.find(".//atom:InfoKind", self.ns["head"])
+		if xml_infokind.text != "震度速報": return
+
+		# 地震発生時刻の取得
+		xml_target_time = xml_head.find(".//atom:TargetDateTime", self.ns["head"])
+		self.eq_time = datetime.datetime.fromisoformat(xml_target_time.text)
+
+		# 観測最大震度の取得
+		xml_observation = xml_body.find(".//atom:Intensity/atom:Observation", self.ns["body"])
+		xml_max_int = xml_observation.find("./atom:MaxInt", self.ns["body"])
+		self.max_int = xml_max_int.text
+
+		# 震度情報（細分区域）の取得
+		xml_arealist = xml_observation.findall("./atom:Pref/atom:Area", self.ns["body"])
+		for xml_area in xml_arealist:
+			xml_areaname  = xml_area.find("./atom:Name",   self.ns["body"])
+			xml_intensity = xml_area.find("./atom:MaxInt", self.ns["body"])
+			self.intensity.AddIntensity(xml_intensity.text, xml_areaname.text)
+
+	def DrawMap(self, plot_level: str="1") -> str:
+		""" 震度地図の描画 """
+		self.SetMapBounds(plot_level)
+		self.PlotIntensity()
+		outpath = self.OutputImage(self.eq_time)
+		return outpath
+	
+### class EQPlotter_VXSE51 END ###
+
+### class EQPlotter_VXSE53 BEGIN ###
+
+class EQPlotter_VXSE53(Hypocenter_Plotter, Intensity_Plotter):
+	""" VXSE53（震源・震度に関する情報）用の電文解析・地図描画クラス """
+	def __init__(self, config: dict) -> None:
+		super().__init__(config)
+		self.eq_time: datetime.datetime = None
+		self.intensity_city = IntensityHolder(config)
+		self.codelist: list[str] = []
+		self.max_int: str = "-"
+
+	def GetMessage(self) -> str:
 		"""
-			緯度経度からピクセル座標に変換する。lon, lat を x, y のタプルにして返す。
-			bound: 地図における上下左右端の緯度経度
-			lon: 経度
-			lat: 緯度
+			メンバ変数に格納された情報から地震情報文を作成する。
 		"""
-		if self.img_base_ is None: return (0, 0)
+		dt  = self.eq_time
+		fdt = True if dt.hour < 12 else False
 
-		lpx, lpy = GetLatLonperPixel(bound, self.img_base_)
-		x = int(Decimal(str((lon - bound[0]) / lpx)).quantize(Decimal("0")))
-		y = int(Decimal(str((bound[3] - lat) / lpy)).quantize(Decimal("0")))
+		rets = f"\n午{"前" if fdt else "後"}{dt.hour if fdt else dt.hour - 12}時{dt.minute}分ごろ地震がありました"
 
-		return (x, y)
+		if "0215" in self.codelist:
+			rets += f"\nこの地震による津波の心配はありません"
+		elif "0211" in self.codelist:
+			rets += f"\nこの地震により、津波警報／注意報が発表されています"
+		
+		rets += f"\n震源は{self.hypocenter.name}"
+		rets += f"\n深さ{self.hypocenter.PrintDepth()}　マグニチュード{self.hypocenter.magnitude or "不明"}"
+		rets += self.intensity_city.PrintIntensity()
+		return rets
+	
+	def ParseXML(self, xml: str) -> None:
+		""" XML (VXSE53) の解析を行う """
+		# xml_ の接頭辞がついている変数は XML の要素を扱うものであるとみなす
+		xml_ctrl, xml_head, xml_body = self.XMLSplitRoot(xml)
 
-### class EQPlotter END ###
+		# XMLが正常にパースできない場合は終了
+		if xml_ctrl is None or xml_head is None or xml_body is None:
+			return
 
+		# InfoKind が「地震情報」でない場合は終了
+		xml_infokind = xml_head.find(".//atom:InfoKind", self.ns["head"])
+		if xml_infokind.text != "地震情報": return
+
+		xml_earthquake = xml_body.find("./atom:Earthquake", self.ns["body"])
+		xml_intensity  = xml_body.find("./atom:Intensity",  self.ns["body"])
+
+		# 地震発生時刻の取得
+		xml_origin_time = xml_body.find(".//atom:OriginTime", self.ns["body"])
+		self.eq_time = datetime.datetime.fromisoformat(xml_origin_time.text)
+
+		# 震源情報の取得
+		# 震源域名
+		xml_hypocenter = xml_earthquake.find("./atom:Hypocenter/atom:Area", self.ns["body"])
+		self.hypocenter.name = xml_hypocenter.find("./atom:Name", self.ns["body"]).text
+
+		# 震源位置（緯度・経度・深さ）
+		xml_coordinate = xml_hypocenter.find("./jmx_eb:Coordinate", self.ns["body"])
+		self.hypocenter.ParseHypocenter(xml_coordinate.text)
+
+		# マグニチュード
+		xml_magnitude = xml_earthquake.find("./jmx_eb:Magnitude", self.ns["body"])
+		self.hypocenter.magnitude = float(xml_magnitude.text)
+
+		# 観測最大震度の取得
+		xml_observation = xml_body.find(".//atom:Intensity/atom:Observation", self.ns["body"])
+		xml_maxint = xml_observation.find("./atom:MaxInt", self.ns["body"])
+		self.max_int = xml_maxint.text
+
+		# 震度情報（細分区域）の取得
+		xml_arealist = xml_observation.findall("./atom:Pref/atom:Area", self.ns["body"])
+		for xml_area in xml_arealist:
+			xml_areaname = xml_area.find("./atom:Name",   self.ns["body"])
+			xml_maxint   = xml_area.find("./atom:MaxInt", self.ns["body"])
+			self.intensity.AddIntensity(xml_maxint.text, xml_areaname.text)	# in Intensity_Plotter
+
+		# 震度情報（市町村等）の取得
+		xml_citylist = xml_observation.findall("./atom:Pref/atom:Area/atom:City", self.ns["body"])
+		for xml_city in xml_citylist:
+			xml_cityname = xml_city.find("./atom:Name",   self.ns["body"])
+			xml_maxint   = xml_city.find("./atom:MaxInt", self.ns["body"])
+			self.intensity_city.AddIntensity(xml_maxint.text, xml_cityname.text)
+
+		# 固定付加文の取得。文はパターン化されておりコードで識別することができる
+		xml_forecast_comment = xml_body.findall(".//atom:ForecastComment[@codeType='固定付加文']", self.ns["body"])
+		for c in xml_forecast_comment:
+			xml_code = c.find(".//atom:Code", self.ns["body"])
+			if xml_code is not None:
+				self.codelist = xml_code.text.split()
+		
+	def DrawMap(self, plot_level: str="1") -> str:
+		""" 震源・震度地図の描画 """
+		Hypocenter_Plotter.SetMapBounds(self)
+		Intensity_Plotter.SetMapBounds(self, plot_level)
+		self.PlotHypocenter(0.4)
+		self.PlotIntensity()
+		outpath = self.OutputImage(self.eq_time)
+		return outpath
 
 ### funcdef BEGIN ###
 
-def GetLatLonperPixel(bound: tuple, img) -> tuple:
+def GetLatLonperPixel(bound: tuple, img: cv2.typing.MatLike) -> tuple:
 	"""
 		1 ピクセルあたりの緯度経度の変化を計算する。1 ピクセルあたりの度数の変化量を x, y のタプルにして返す。
 		bound: 地図における上下左右端の緯度経度
@@ -350,7 +442,7 @@ def GetLatLonperPixel(bound: tuple, img) -> tuple:
 
 	return (wln / wpx, hlt / hpx)
 
-def GetCenterPixel(img) -> tuple:
+def GetCenterPixel(img: cv2.typing.MatLike) -> tuple:
 	"""
 		画像の中央座標を取得する
 		img: 画像
@@ -361,7 +453,7 @@ def GetCenterPixel(img) -> tuple:
 	cy = int(Decimal(str(img.shape[0] / 2)).quantize(Decimal("0")))
 	return (cx, cy)
 
-def alpha_blend(img_base, img_add, x: int, y: int) -> None:
+def alpha_blend(img_base: cv2.typing.MatLike, img_add: cv2.typing.MatLike, x: int, y: int) -> None:
 	"""
 		参考 : https://qiita.com/smatsumt/items/923aefb052f217f2f3c5
 		画像を重ね合わせる（アルファブレンド）。
@@ -381,22 +473,6 @@ def alpha_blend(img_base, img_add, x: int, y: int) -> None:
 
 def csv2tuple(csv: str) -> tuple:
 	return tuple(map(float, csv.split(",")))
-
-# max_bound: [min_x, min_y, max_x, max_y]
-def ExpandBound(max_bound: list, min_x: float, min_y: float, max_x: float, max_y: float) -> list:
-	"""
-		矩形と座標を比較し、矩形が拡大するように更新する。
-		max_bound: 更新される図形
-		min_x: 左
-		min_y: 上
-		max_x: 右
-		max_y: 下
-	"""
-	max_bound[0] = min(min_x, max_bound[0])	# min_x
-	max_bound[1] = min(min_y, max_bound[1])	# min_y
-	max_bound[2] = max(max_x, max_bound[2])	# max_x
-	max_bound[3] = max(max_y, max_bound[3])	# max_y
-	return max_bound
 
 ### funcdef END ###
 
@@ -418,12 +494,9 @@ if __name__ == "__main__":
 			print(f"{output_path} is not found. Now Making...")
 			os.mkdir(output_path)
 		
-		eqp = EQPlotter(conf)
+		eqp = EQPlotter_VXSE53(conf)
 		eqp.ParseXML(xml)
-
-		eqlevel = conf["eqlevel"]
-		imax = eqp.eqi_.intensity_area.intensity_max
-		eqp.DrawMap("3" if eqlevel[imax] >= 3 else "1")
 		print(eqp.GetMessage())
+		eqp.DrawMap("3" if conf["eqlevel"][eqp.max_int] >= 3 else 1)
 	else:
 		print("USAGE>python report.py [path_to_xml]")
