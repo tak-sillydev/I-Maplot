@@ -32,7 +32,7 @@
 			"shapefile": "./20190125_AreaForecastLocalE_GIS/地震情報／細分区域.shp",
 			"color": {
 				"edge": "silver",
-				"face": "burlywood",
+				"face": "wheat",
 				"back": "cornflowerblue"
 			}
 		}

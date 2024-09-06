@@ -25,6 +25,7 @@ from report import EQPlotter_VXSE51, EQPlotter_VXSE53
 import log
 import debugdef
 
+
 ### class EntryData BEGIN ###
 
 @dataclasses.dataclass
@@ -101,7 +102,7 @@ def ValidEntryGenerator(feedctl: FeedControl, entry_list: list[EntryData], confi
 	last_time: datetime.datetime = None
 
 	for l in lsentry:
-		if l.updated_time < feedctl.last_eq: continue
+		if l.updated_time <= feedctl.last_eq: continue
 
 		if   "VXSE51" in l.id:	# 震度速報
 			last_time = l.updated_time
@@ -146,6 +147,8 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 				# 「震度に関する情報」と「震源・震度に関する情報」を抜き出す
 				# 「震源に関する情報」は、直後に震度と一緒に情報が再送されるため無視する
 				for name, entry, plotter in ValidEntryGenerator(feedctl, GetEntryList(xml, ns), config):
+					print(f"ENTRY, PLOTTER: {id(entry)}, {id(plotter)}")
+					print(f"LAST_EQ: {feedctl.last_eq}")
 					response = requests.get(entry.link)
 					response.encoding = response.apparent_encoding
 					response.raise_for_status()
