@@ -179,7 +179,7 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 	except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
 		OnRequestException(feedctl, config, e)
 
-	except xml.etree.ElementTree.ParseError:
+	except ET.ParseError:
 		tmstr = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 		fname = config["paths"]["log"]["dir"] + "/" + tmstr + "_err.txt"
 		logger.error(traceback.format_exc() + "\n\nXML saved as : " + fname)
