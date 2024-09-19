@@ -147,8 +147,6 @@ def GetJMAXMLFeed_Eqvol(feedctl: FeedControl, ns: dict, config: dict) -> None:
 				# 「震度に関する情報」と「震源・震度に関する情報」を抜き出す
 				# 「震源に関する情報」は、直後に震度と一緒に情報が再送されるため無視する
 				for name, entry, plotter in ValidEntryGenerator(feedctl, GetEntryList(xml, ns), config):
-					print(f"ENTRY, PLOTTER: {id(entry)}, {id(plotter)}")
-					print(f"LAST_EQ: {feedctl.last_eq}")
 					response = requests.get(entry.link)
 					response.encoding = response.apparent_encoding
 					response.raise_for_status()
