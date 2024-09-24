@@ -393,23 +393,28 @@ class EQPlotter_VXSE53(Hypocenter_Plotter, Intensity_Plotter):
 		self.hypocenter.magnitude = float(xml_magnitude.text)
 
 		# 観測最大震度の取得
+		# 2024-09-24 震度が観測されない場合がある
 		xml_observation = xml_body.find(".//atom:Intensity/atom:Observation", self.ns["body"])
-		xml_maxint = xml_observation.find("./atom:MaxInt", self.ns["body"])
-		self.max_int = xml_maxint.text
+		
+		if xml_observation is None: 
+			self.max_int = "-"
+		else:
+			xml_maxint = xml_observation.find("./atom:MaxInt", self.ns["body"])
+			self.max_int = xml_maxint.text
 
-		# 震度情報（細分区域）の取得
-		xml_arealist = xml_observation.findall("./atom:Pref/atom:Area", self.ns["body"])
-		for xml_area in xml_arealist:
-			xml_areaname = xml_area.find("./atom:Name",   self.ns["body"])
-			xml_maxint   = xml_area.find("./atom:MaxInt", self.ns["body"])
-			self.intensity.AddIntensity(xml_maxint.text, xml_areaname.text)	# in Intensity_Plotter
+			# 震度情報（細分区域）の取得
+			xml_arealist = xml_observation.findall("./atom:Pref/atom:Area", self.ns["body"])
+			for xml_area in xml_arealist:
+				xml_areaname = xml_area.find("./atom:Name",   self.ns["body"])
+				xml_maxint   = xml_area.find("./atom:MaxInt", self.ns["body"])
+				self.intensity.AddIntensity(xml_maxint.text, xml_areaname.text)	# in Intensity_Plotter
 
-		# 震度情報（市町村等）の取得
-		xml_citylist = xml_observation.findall("./atom:Pref/atom:Area/atom:City", self.ns["body"])
-		for xml_city in xml_citylist:
-			xml_cityname = xml_city.find("./atom:Name",   self.ns["body"])
-			xml_maxint   = xml_city.find("./atom:MaxInt", self.ns["body"])
-			self.intensity_city.AddIntensity(xml_maxint.text, xml_cityname.text)
+			# 震度情報（市町村等）の取得
+			xml_citylist = xml_observation.findall("./atom:Pref/atom:Area/atom:City", self.ns["body"])
+			for xml_city in xml_citylist:
+				xml_cityname = xml_city.find("./atom:Name",   self.ns["body"])
+				xml_maxint   = xml_city.find("./atom:MaxInt", self.ns["body"])
+				self.intensity_city.AddIntensity(xml_maxint.text, xml_cityname.text)
 
 		# 固定付加文の取得。文はパターン化されておりコードで識別することができる
 		xml_forecast_comment = xml_body.findall(".//atom:ForecastComment[@codeType='固定付加文']", self.ns["body"])
